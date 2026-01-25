@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Models Configuration",
+  "description": "视频内容相似度检测系统的模特配置文件",
+  "type": "object",
+  "properties": {
+    "models": {
+      "type": "object",
+      "description": "模特信息配置",
+      "properties": {
+        "模特名称": {
+          "type": "string",
+          "description": "模特的名称或艺名"
+        },
+        "model_url": {
+          "type": "string",
+          "description": "模特的官方或公开页面链接"
+        }
+      },
+      "required": ["模特名称", "model_url"]
+    }
+  },
+  "examples": [
+    {
+      "models": {
+        "示例模特1": "https://example.com/models/model1",
+        "示例模特2": "https://example.com/models/model2"
+      }
+    }
+  ],
+  "notes": [
+    "注意：请确保添加的链接符合法律法规要求",
+    "建议使用官方、公开且合法的模特信息页面",
+    "避免添加包含非法内容或侵犯隐私的链接"
+  ]
+}
