@@ -165,10 +165,31 @@ class ModelManagerGUI:
         module_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
         # 本地目录选择
-        ttk.Label(config_frame, text="本地目录: ").pack(side=tk.LEFT)
-        self.local_dir_var = tk.StringVar(value="F:\\作品")
-        ttk.Entry(config_frame, textvariable=self.local_dir_var, width=30).pack(side=tk.LEFT, padx=(5, 5))
-        ttk.Button(config_frame, text="浏览", command=self.browse_local_dir).pack(side=tk.LEFT, padx=(5, 20))
+        ttk.Label(config_frame, text="本地目录: ").pack(anchor=tk.W, pady=2)
+        dir_frame = ttk.Frame(config_frame)
+        dir_frame.pack(fill=tk.X, pady=2)
+        
+        # 目录列表
+        self.dir_listbox = tk.Listbox(dir_frame, width=60, height=3)
+        self.dir_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        
+        # 滚动条
+        scrollbar = ttk.Scrollbar(dir_frame, orient=tk.VERTICAL, command=self.dir_listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.dir_listbox.configure(yscroll=scrollbar.set)
+        
+        # 按钮框架
+        btn_frame = ttk.Frame(dir_frame, width=100)
+        btn_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
+        
+        # 添加目录按钮
+        ttk.Button(btn_frame, text="添加", command=self.add_local_dir, width=10).pack(fill=tk.X, pady=2)
+        
+        # 删除目录按钮
+        ttk.Button(btn_frame, text="删除", command=self.remove_local_dir, width=10).pack(fill=tk.X, pady=2)
+        
+        # 初始化默认目录
+        self.dir_listbox.insert(tk.END, "F:\\作品")
         
         # 使用Selenium选项
         self.use_selenium_var = tk.BooleanVar(value=True)
@@ -561,8 +582,14 @@ class ModelManagerGUI:
             # 导入核心模块
             from core.core import main
             
+            # 获取所有目录
+            dirs = [self.dir_listbox.get(i) for i in range(self.dir_listbox.size())]
+            if not dirs:
+                messagebox.showinfo("提示", "请至少添加一个本地目录")
+                return
+            
             # 运行脚本
-            main(self.module_var.get(), self.local_dir_var.get())
+            main(self.module_var.get(), dirs)
             
             # 发送完成消息
             self.queue.put(("completed", "运行完成"))
@@ -694,11 +721,23 @@ class ModelManagerGUI:
         
         messagebox.showinfo("使用说明", help_text)
     
-    def browse_local_dir(self):
-        """浏览选择本地目录"""
+    def add_local_dir(self):
+        """添加本地目录"""
         directory = filedialog.askdirectory(title="选择本地视频目录")
         if directory:
-            self.local_dir_var.set(directory)
+            # 检查目录是否已存在
+            for i in range(self.dir_listbox.size()):
+                if self.dir_listbox.get(i) == directory:
+                    messagebox.showinfo("提示", "该目录已存在于列表中")
+                    return
+            # 添加到列表
+            self.dir_listbox.insert(tk.END, directory)
+    
+    def remove_local_dir(self):
+        """删除选中的本地目录"""
+        selected = self.dir_listbox.curselection()
+        if selected:
+            self.dir_listbox.delete(selected)
     
     def show_about(self):
         """显示关于信息"""
