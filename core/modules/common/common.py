@@ -250,6 +250,30 @@ def extract_local_videos(folder: str, video_exts: Set[str],
     
     return videos
 
+def extract_local_folders(folder: str) -> Set[str]:
+    """
+    提取本地文件夹名称，支持多层文件夹结构
+    递归扫描子文件夹，提取文件夹名称作为视频标题
+    """
+    folders = set()
+    
+    if not os.path.exists(folder):
+        return folders
+    
+    # 递归扫描所有子目录
+    for root_dir, subdirs, _ in os.walk(folder):
+        for subdir in subdirs:
+            # 清理文件夹名称
+            cleaned = subdir.strip()
+            # 移除日期前缀（如果有），如 [2026-01-27]
+            cleaned = re.sub(r'^\[\d{4}-\d{2}-\d{2}\]', '', cleaned)
+            # 移除多余的空格
+            cleaned = cleaned.strip()
+            if cleaned:
+                folders.add(cleaned)
+    
+    return folders
+
 def record_missing_videos(model_name: str, url: str, missing_titles: List[Tuple[str, str]], 
                          missing_logger, logger, local_count=0, online_count=0):
     """记录缺失视频到专用日志文件"""

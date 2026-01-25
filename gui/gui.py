@@ -591,6 +591,14 @@ class ModelManagerGUI:
             import sys
             import os
             import importlib.util
+            import logging
+            
+            # 配置日志捕获
+            class QueueHandler(logging.Handler):
+                def emit(self, record):
+                    if self.running:
+                        msg = self.format(record)
+                        self.queue.put(("log", msg))
             
             # 获取核心模块路径
             if hasattr(sys, '_MEIPASS'):
@@ -606,8 +614,33 @@ class ModelManagerGUI:
                 core_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(core_module)
                 
+                # 替换core模块的日志处理器
+                original_logger = logging.getLogger()
+                original_handlers = original_logger.handlers.copy()
+                
+                # 创建队列处理器
+                queue_handler = QueueHandler()
+                queue_handler.setLevel(logging.INFO)
+                queue_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
+                queue_handler.queue = self.queue
+                queue_handler.running = self.running
+                
+                # 清空原有处理器并添加队列处理器
+                for handler in original_handlers:
+                    original_logger.removeHandler(handler)
+                original_logger.addHandler(queue_handler)
+                
                 # 运行脚本
-                core_module.main(self.module_var.get(), dirs, self.scraper_var.get())
+                try:
+                    # 传递一个函数，用于检查运行状态
+                    def check_running():
+                        return self.running
+                    core_module.main(self.module_var.get(), dirs, self.scraper_var.get(), check_running)
+                finally:
+                    # 恢复原有日志处理器
+                    original_logger.removeHandler(queue_handler)
+                    for handler in original_handlers:
+                        original_logger.addHandler(handler)
                 
                 # 发送完成消息
                 self.queue.put(("completed", "运行完成"))
@@ -615,6 +648,9 @@ class ModelManagerGUI:
                 raise Exception(f"无法找到核心模块: {core_py_path}")
         except Exception as e:
             self.queue.put(("error", str(e)))
+        finally:
+            # 确保线程结束后更新按钮状态
+            self.queue.put(("completed", "运行完成"))
     
     def check_queue(self):
         """检查队列，处理线程消息"""

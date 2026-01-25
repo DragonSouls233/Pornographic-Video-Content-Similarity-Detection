@@ -19,6 +19,7 @@ from core.modules.common.common import (
     load_cache,
     save_cache,
     extract_local_videos,
+    extract_local_folders,
     record_missing_videos
 )
 
@@ -33,13 +34,14 @@ from core.modules.javdb.javdb import (
 )
 
 # --- 主程序 ---
-def main(module_arg="auto", local_dirs=None, scraper="selenium"):
+def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=None):
     """主程序入口
     
     Args:
         module_arg: 模块类型参数，可选值: "auto", "pronhub", "javdb"
         local_dirs: 本地目录路径列表，如果提供则覆盖配置文件中的设置
         scraper: 抓取工具，可选值: "selenium", "playwright", "drissionpage", "zendriver"
+        running_flag: 运行标志，用于控制程序是否继续运行
     """
     try:
         # 模块选择
@@ -144,6 +146,18 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium"):
         
         # 处理每个本地模特
         for i, (model_name, folder, original_dir, country) in enumerate(local_matches, 1):
+            # 检查是否需要停止
+            if running_flag is not None:
+                # 检查running_flag是否是可调用对象
+                if callable(running_flag):
+                    if not running_flag():
+                        logger.info("⚠ 用户请求停止，退出处理")
+                        break
+                else:
+                    if not running_flag:
+                        logger.info("⚠ 用户请求停止，退出处理")
+                        break
+            
             logger.info(f"\n[{i}/{len(local_matches)}] 处理模特: {model_name} (国家: {country})")
             logger.info(f"  本地目录: {original_dir}")
             logger.info(f"  完整路径: {folder}")
@@ -152,22 +166,35 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium"):
             country_dir = os.path.join(countries_dir, country)
             Path(country_dir).mkdir(exist_ok=True)
             
-            # 提取本地视频（支持多层文件夹）
-            local_set = extract_local_videos(
-                folder, 
-                set(config['video_extensions']), 
-                config['filename_clean_patterns']
-            )
-            
-            logger.info(f"  本地视频文件: {len(local_set)} 个")
-            
-            if local_set:
-                sample = list(local_set)[:5]
-                logger.info(f"  本地样本:")
-                for idx, title in enumerate(sample, 1):
-                    logger.info(f"    {idx}. {title[:80]}{'...' if len(title) > 80 else ''}")
+            # 提取本地标题（根据模块类型选择不同的提取方式）
+            if module_type == 1 or (module_type == 3 and '[Channel]' in original_dir):
+                # PRONHUB模块或自动模式下的PRONHUB格式目录：从视频文件中提取
+                local_set = extract_local_videos(
+                    folder, 
+                    set(config['video_extensions']), 
+                    config['filename_clean_patterns']
+                )
+                logger.info(f"  本地视频文件: {len(local_set)} 个")
+                
+                if local_set:
+                    sample = list(local_set)[:5]
+                    logger.info(f"  本地样本:")
+                    for idx, title in enumerate(sample, 1):
+                        logger.info(f"    {idx}. {title[:80]}{'...' if len(title) > 80 else ''}")
+                else:
+                    logger.warning(f"  ⚠ 本地目录中没有找到视频文件")
             else:
-                logger.warning(f"  ⚠ 本地目录中没有找到视频文件")
+                # JAVDB模块或自动模式下的JAVDB格式目录：从文件夹名称中提取
+                local_set = extract_local_folders(folder)
+                logger.info(f"  本地文件夹: {len(local_set)} 个")
+                
+                if local_set:
+                    sample = list(local_set)[:5]
+                    logger.info(f"  本地样本:")
+                    for idx, title in enumerate(sample, 1):
+                        logger.info(f"    {idx}. {title[:80]}{'...' if len(title) > 80 else ''}")
+                else:
+                    logger.warning(f"  ⚠ 本地目录中没有找到文件夹")
             
             # 获取模特URL
             url = models.get(model_name)
@@ -186,6 +213,18 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium"):
             
             # 延时策略
             if i > 1 and config.get('delay_between_pages'):
+                # 检查是否需要停止
+                if running_flag is not None:
+                    # 检查running_flag是否是可调用对象
+                    if callable(running_flag):
+                        if not running_flag():
+                            logger.info("⚠ 用户请求停止，退出处理")
+                            break
+                    else:
+                        if not running_flag:
+                            logger.info("⚠ 用户请求停止，退出处理")
+                            break
+                
                 min_delay = config['delay_between_pages'].get('min', 2.0)
                 max_delay = config['delay_between_pages'].get('max', 3.5)
                 delay = random.uniform(min_delay, max_delay)
@@ -202,6 +241,18 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium"):
             new_videos = set()
             
             for attempt in range(max_retries + 1):
+                # 检查是否需要停止
+                if running_flag is not None:
+                    # 检查running_flag是否是可调用对象
+                    if callable(running_flag):
+                        if not running_flag():
+                            logger.info("⚠ 用户请求停止，退出处理")
+                            break
+                    else:
+                        if not running_flag:
+                            logger.info("⚠ 用户请求停止，退出处理")
+                            break
+                
                 try:
                     # 根据模块类型选择相应的抓取函数
                     if module_type == 1 or (module_type == 3 and '[Channel]' in original_dir):
