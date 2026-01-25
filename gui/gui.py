@@ -11,6 +11,9 @@ import sys
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
+# 导入内置浏览器模块
+from gui.browser import BrowserTab
+
 class ModelManagerGUI:
     def __init__(self, root):
         self.root = root
@@ -48,10 +51,15 @@ class ModelManagerGUI:
         self.result_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.result_tab, text="结果显示")
         
+        # 创建内置浏览器标签页
+        self.browser_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.browser_tab, text="内置浏览器")
+        
         # 初始化各标签页
         self.init_model_tab()
         self.init_run_tab()
         self.init_result_tab()
+        self.init_browser_tab()
         
         # 加载模特数据
         self.models = self.load_models()
@@ -294,6 +302,11 @@ class ModelManagerGUI:
         
         ttk.Button(export_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
     
+    def init_browser_tab(self):
+        """初始化内置浏览器标签页"""
+        # 使用独立的浏览器模块
+        self.browser = BrowserTab(self.browser_tab)
+    
     def load_models(self):
         """加载模特数据"""
         try:
@@ -407,6 +420,44 @@ class ModelManagerGUI:
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.wait_window(dialog)
+    
+    def refresh_public_ip(self):
+        """刷新公网IP"""
+        try:
+            import requests
+            # 尝试获取公网IP
+            response = requests.get("https://api.ipify.org", timeout=10)
+            if response.status_code == 200:
+                public_ip = response.text.strip()
+                self.public_ip_var.set(public_ip)
+                # 更新配置文件
+                import yaml
+                with open("config.yaml", "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                config["proxy"]["public_ip"] = public_ip
+                with open("config.yaml", "w", encoding="utf-8") as f:
+                    yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+                messagebox.showinfo("成功", f"公网IP已更新: {public_ip}")
+            else:
+                messagebox.showerror("错误", "获取公网IP失败")
+        except Exception as e:
+            messagebox.showerror("错误", f"获取公网IP失败: {e}")
+    
+    def ping_test(self):
+        """PING测试"""
+        try:
+            import subprocess
+            # PING百度测试网络连接
+            result = subprocess.run(
+                ["ping", "-n", "4", "www.baidu.com"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            # 显示PING结果
+            messagebox.showinfo("PING测试结果", result.stdout)
+        except Exception as e:
+            messagebox.showerror("错误", f"PING测试失败: {e}")
     
     def edit_model(self):
         """编辑模特"""
@@ -764,19 +815,52 @@ class ModelManagerGUI:
         proxy_frame = ttk.Frame(notebook, padding="10")
         notebook.add(proxy_frame, text="代理设置")
         
-        # 启用代理
+        # 代理启用复选框
         proxy_enabled_var = tk.BooleanVar(value=config.get("proxy", {}).get("enabled", False))
-        ttk.Checkbutton(proxy_frame, text="启用代理", variable=proxy_enabled_var).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=10)
+        proxy_check = ttk.Checkbutton(proxy_frame, text="代理", variable=proxy_enabled_var)
+        proxy_check.grid(row=0, column=0, sticky=tk.W, pady=10)
         
-        # HTTP代理
-        ttk.Label(proxy_frame, text="HTTP代理: ").grid(row=1, column=0, sticky=tk.W, pady=5)
-        http_proxy_var = tk.StringVar(value=config.get("proxy", {}).get("http", ""))
-        ttk.Entry(proxy_frame, textvariable=http_proxy_var, width=40).grid(row=1, column=1, sticky=tk.W, pady=5)
+        # 代理服务器设置
+        proxy_frame.grid_columnconfigure(0, weight=1)
+        proxy_frame.grid_columnconfigure(1, weight=1)
+        proxy_frame.grid_columnconfigure(2, weight=1)
         
-        # HTTPS代理
-        ttk.Label(proxy_frame, text="HTTPS代理: ").grid(row=2, column=0, sticky=tk.W, pady=5)
-        https_proxy_var = tk.StringVar(value=config.get("proxy", {}).get("https", ""))
-        ttk.Entry(proxy_frame, textvariable=https_proxy_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=5)
+        ttk.Label(proxy_frame, text="主机: ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        proxy_host_var = tk.StringVar(value=config.get("proxy", {}).get("host", "127.0.0.1"))
+        ttk.Entry(proxy_frame, textvariable=proxy_host_var, width=20).grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        ttk.Label(proxy_frame, text="端口: ").grid(row=1, column=2, sticky=tk.W, pady=5)
+        proxy_port_var = tk.StringVar(value=config.get("proxy", {}).get("port", "10808"))
+        ttk.Entry(proxy_frame, textvariable=proxy_port_var, width=10).grid(row=1, column=3, sticky=tk.W, pady=5)
+        
+        # 账号密码设置
+        ttk.Radiobutton(proxy_frame, text="账号/密码", value=1).grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(proxy_frame, text="ID: ").grid(row=2, column=1, sticky=tk.W, pady=5)
+        proxy_id_var = tk.StringVar(value=config.get("proxy", {}).get("id", ""))
+        ttk.Entry(proxy_frame, textvariable=proxy_id_var, width=20).grid(row=2, column=2, sticky=tk.W, pady=5)
+        
+        ttk.Label(proxy_frame, text="Password: ").grid(row=3, column=1, sticky=tk.W, pady=5)
+        proxy_password_var = tk.StringVar(value=config.get("proxy", {}).get("password", ""))
+        ttk.Entry(proxy_frame, textvariable=proxy_password_var, width=20, show="*").grid(row=3, column=2, sticky=tk.W, pady=5)
+        
+        # 下载限速选项
+        download_limit_var = tk.BooleanVar(value=config.get("proxy", {}).get("download_limit", False))
+        ttk.Checkbutton(proxy_frame, text="下载限速", variable=download_limit_var).grid(row=4, column=0, sticky=tk.W, pady=5)
+        
+        # 绕过DPI选项
+        bypass_dpi_var = tk.BooleanVar(value=config.get("proxy", {}).get("bypass_dpi", False))
+        ttk.Checkbutton(proxy_frame, text="绕过DPI", variable=bypass_dpi_var).grid(row=5, column=0, sticky=tk.W, pady=5)
+        
+        # 公网IP显示
+        ttk.Label(proxy_frame, text="IP 公共: ").grid(row=6, column=0, sticky=tk.W, pady=10)
+        self.public_ip_var = tk.StringVar(value=config.get("proxy", {}).get("public_ip", "000.000.000.000"))
+        ttk.Entry(proxy_frame, textvariable=self.public_ip_var, width=20, state="readonly").grid(row=6, column=1, sticky=tk.W, pady=10)
+        
+        # 刷新IP按钮
+        ttk.Button(proxy_frame, text="刷新", command=self.refresh_public_ip).grid(row=6, column=2, sticky=tk.W, pady=10)
+        
+        # PING测试按钮
+        ttk.Button(proxy_frame, text="PING测试", command=self.ping_test).grid(row=7, column=0, columnspan=4, pady=10)
         
         # 按钮框架
         button_frame = ttk.Frame(main_frame, padding="10")
@@ -797,8 +881,15 @@ class ModelManagerGUI:
                 config["retry_on_fail"] = int(retry_var.get())
                 config["proxy"] = {
                     "enabled": proxy_enabled_var.get(),
-                    "http": http_proxy_var.get().strip(),
-                    "https": https_proxy_var.get().strip()
+                    "host": proxy_host_var.get().strip(),
+                    "port": proxy_port_var.get().strip(),
+                    "id": proxy_id_var.get().strip(),
+                    "password": proxy_password_var.get().strip(),
+                    "download_limit": download_limit_var.get(),
+                    "bypass_dpi": bypass_dpi_var.get(),
+                    "public_ip": self.public_ip_var.get().strip(),
+                    "http": f"http://{proxy_host_var.get().strip()}:{proxy_port_var.get().strip()}" if proxy_enabled_var.get() else "",
+                    "https": f"http://{proxy_host_var.get().strip()}:{proxy_port_var.get().strip()}" if proxy_enabled_var.get() else ""
                 }
                 
                 # 保存配置
