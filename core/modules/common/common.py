@@ -51,8 +51,33 @@ def setup_logging(log_dir: str, config_name: str = "main"):
 
 # --- 配置加载 ---
 def load_config(config_path: str = "config.yaml") -> dict:
-    """加载YAML配置文件"""
+    """加载YAML配置文件，如果不存在则自动创建默认配置"""
     try:
+        if not os.path.exists(config_path):
+            # 自动生成默认配置文件
+            default_config = {
+                "local_roots": ["F:\\作品"],
+                "output_dir": "output",
+                "log_dir": "log",
+                "video_extensions": ["mp4", "avi", "mov", "wmv", "flv", "mkv", "rmvb"],
+                "filename_clean_patterns": [
+                    r"(?i)\[.*?\]",
+                    r"(?i)\(.*?\)",
+                    r"(?i)\{.*?\}"
+                ],
+                "use_selenium": True,
+                "max_pages": -1,
+                "delay_between_pages": {
+                    "min": 2.0,
+                    "max": 3.5
+                },
+                "retry_on_fail": 2
+            }
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False)
+            print(f"配置文件不存在，已自动创建默认配置文件: {config_path}")
+            return default_config
+        
         with open(config_path, 'r', encoding='utf-8') as f:
             config_text = f.read()
             config_text = config_text.replace('\\', '\\\\')
@@ -62,8 +87,15 @@ def load_config(config_path: str = "config.yaml") -> dict:
         sys.exit(1)
 
 def load_models(model_path: str = "models.json") -> dict:
-    """加载模特配置JSON文件"""
+    """加载模特配置JSON文件，如果不存在则自动创建空文件"""
     try:
+        if not os.path.exists(model_path):
+            # 自动生成空的模特配置文件
+            with open(model_path, 'w', encoding='utf-8') as f:
+                json.dump({}, f, ensure_ascii=False, indent=2)
+            print(f"模特配置文件不存在，已自动创建空文件: {model_path}")
+            return {}
+        
         with open(model_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             # 检查是否是schema格式，如果是，尝试获取examples中的模特数据

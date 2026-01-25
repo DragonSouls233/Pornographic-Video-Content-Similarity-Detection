@@ -264,6 +264,14 @@ class ModelManagerGUI:
     def load_models(self):
         """加载模特数据"""
         try:
+            # 检查文件是否存在，如果不存在则创建空文件
+            if not os.path.exists("models.json"):
+                # 自动生成空的models.json文件
+                with open("models.json", "w", encoding="utf-8") as f:
+                    json.dump({}, f, ensure_ascii=False, indent=2)
+                messagebox.showinfo("提示", "models.json文件不存在，已自动创建空文件")
+                return {}
+            # 文件存在，读取内容
             with open("models.json", "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
