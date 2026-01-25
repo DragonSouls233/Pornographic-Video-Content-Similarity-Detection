@@ -24,9 +24,9 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
     
     # 从配置中获取代理设置
     proxies = {}
-    if config.get('proxy', {}).get('enabled', False):
-        http_proxy = config['proxy'].get('http', '')
-        https_proxy = config['proxy'].get('https', '')
+    if config.get('network', {}).get('proxy', {}).get('enabled', False):
+        http_proxy = config['network']['proxy'].get('http', '')
+        https_proxy = config['network']['proxy'].get('https', '')
         if http_proxy:
             proxies['http'] = http_proxy
         if https_proxy:

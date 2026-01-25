@@ -1,0 +1,174 @@
+# 默认配置文件模板
+DEFAULT_CONFIG = """
+# =====================================
+# 配置文件 - 视频内容相似度检测系统
+# =====================================
+
+# === 扫描设置 ===
+# 本地视频文件根目录列表，系统将从这些目录开始扫描视频文件
+# 示例目录配置，请根据实际情况修改为您的本地目录路径
+local_roots:
+  - "test_videos"       # 测试目录
+
+# === 网页抓取设置 ===
+use_selenium: true            # 是否使用Selenium浏览器进行网页抓取（true=启用）
+delay_between_pages:           # 页面间延迟设置，避免请求过于频繁被封
+  min: 2.0                     # 最小延迟时间（秒）
+  max: 3.5                     # 最大延迟时间（秒）
+retry_on_fail: 2               # 请求失败时的重试次数
+max_pages: -1                  # 最大翻页数（-1表示无限制翻页）
+
+# === 文件过滤 ===
+# 支持的视频文件扩展名列表，只有这些扩展名的文件会被处理
+video_extensions:
+  - ".mp4"   # MPEG-4视频格式
+  - ".mkv"   # Matroska视频格式
+  - ".avi"   # AVI视频格式
+  - ".mov"   # QuickTime视频格式
+  - ".wmv"   # Windows Media视频格式
+  - ".flv"   # Flash视频格式
+
+# === 清洗规则 ===
+# 文件名清洗正则表达式列表，用于从文件名中移除无关信息
+filename_clean_patterns:
+  - "^\\[Channel\\]\\s*"        # 移除开头的[Channel]标记
+  - "_\\d{3,4}x\\d{3,4}"        # 移除分辨率信息（如_1920x1080）
+  - "_\\d{8}"                    # 移除日期信息（如_20240101）
+  - "\\[.*?\\]"                  # 移除方括号内的所有内容
+  - "\\(.*?\\)"                  # 移除圆括号内的所有内容
+  - "\\d{3,4}p"                  # 移除清晰度标记（如1080p）
+  - "HD|FHD|UHD|4K"               # 移除高清标记
+  - "web[-_]?dl|webrip|bluray|dvdrip"  # 移除来源标记
+
+# === 输出设置 ===
+output_dir: "output"          # 输出结果目录
+log_dir: "logs"               # 日志文件目录
+
+# === 缓存管理 ===
+cache:
+  enabled: true                  # 是否启用缓存
+  cache_dir: "cache"             # 缓存目录路径（相对于output_dir）
+  expiration_days: 3650          # 缓存过期时间（天）- 设置为10年
+  max_size_mb: -1                # 缓存最大大小（MB）- -1表示无限制
+  cleanup_strategy: "none"       # 清理策略：none（不清理）、expired（只清理过期）、size（按大小）、all（全部）
+  compress: false                # 是否压缩缓存文件
+
+# === 网络请求 ===
+network:
+  timeout: 300                   # 请求超时时间（秒）- 设置为5分钟
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"  # 自定义User-Agent
+  headers:                       # 额外的HTTP请求头
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+    Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+  proxy:                         # 代理服务器设置
+    enabled: false
+    type: "socks5"
+    host: "127.0.0.1"
+    port: "10808"
+    id: ""
+    password: ""
+    download_limit: false
+    bypass_dpi: false
+    public_ip: "000.000.000.000"
+    http: ""
+    https: ""
+  verify_ssl: true               # 是否验证SSL证书
+  pool_size: 10                  # HTTP连接池大小 - 增大连接池
+  backoff_factor: 0.5            # 重试间隔的退避因子
+
+# === 对比逻辑 ===
+comparison:
+  mode: "new_only"               # 对比模式：new_only（只检查新视频）、all（所有视频）
+  similarity_threshold: 0.8       # 相似度阈值（0-1）
+  match_strategy: "fuzzy"        # 匹配策略：exact（精确）、fuzzy（模糊）
+  ignore_list:                   # 忽略的视频标题列表
+    - "Sample Video"
+    - "Test Video"
+  case_sensitive: false          # 是否区分大小写
+  strip_punctuation: true        # 是否移除标点符号后对比
+
+# === 日志配置 ===
+logging:
+  level: "INFO"                  # 日志级别：DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s | %(levelname)-8s | %(message)s"  # 日志格式
+  datefmt: "%Y-%m-%d %H:%M:%S"   # 日期时间格式
+  encoding: "utf-8"              # 日志文件编码
+  max_bytes: 10485760            # 单个日志文件最大大小（10MB）
+  backup_count: 5                # 保留的日志文件数量
+  console: true                  # 是否输出到控制台
+  missing_video_detail: true     # 缺失视频日志的详细程度
+  countries_log_structure: true  # 是否创建国家分类日志目录
+
+# === Selenium配置 ===
+selenium:
+  browser: "chrome"              # 浏览器类型：chrome, firefox, edge
+  chromedriver_path: ""          # ChromeDriver路径（留空自动查找）
+  window_size: "1920x1080"       # 浏览器窗口大小
+  page_load_timeout: 600         # 页面加载超时时间（秒）- 设置为10分钟
+  script_timeout: 300            # 脚本执行超时时间（秒）- 设置为5分钟
+  headless: true                 # 是否启用无头模式
+  disable_extensions: true       # 是否禁用浏览器扩展
+  disable_gpu: true              # 是否禁用GPU加速
+  user_data_dir: ""              # 用户数据目录（留空使用临时目录）
+  profile_directory: ""          # 浏览器配置文件目录
+
+# === 本地文件扫描 ===
+local_scan:
+  max_depth: -1                  # 最大扫描深度 - -1表示无限制
+  thread_count: 3                # 扫描线程数
+  min_file_size: 0               # 最小文件大小（字节）- 0表示无限制
+  max_file_size: -1              # 最大文件大小（字节）- -1表示无限制
+  ignore_dirs:                   # 忽略的目录列表
+    - "System Volume Information"
+    - "$RECYCLE.BIN"
+  ignore_files:                  # 忽略的文件列表
+    - "Thumbs.db"
+  model_dir_pattern: "^\\[.*?\\]\\s*"  # 模特目录匹配模式
+  scan_timeout: -1               # 扫描超时时间（秒）- -1表示无限制
+  follow_symlinks: false         # 是否跟随符号链接
+
+# === 文件名清理 ===
+filename_cleaning:
+  enabled: true                  # 是否启用文件名清理
+  clean_patterns:                # 自定义清理规则（会与默认规则合并）
+    - "^\\[Sample\\]\\s*"        # 示例：移除开头的[Sample]标记
+  clean_order:                   # 清理规则的应用顺序
+    - "brackets"                 # 方括号内容
+    - "parentheses"              # 圆括号内容
+    - "resolution"               # 分辨率信息
+    - "date"                     # 日期信息
+    - "special_chars"            # 特殊字符
+  character_mapping:             # 字符映射规则
+    "　": " "                    # 全角空格转半角
+    "–": "-"                     # 长破折号转短破折号
+  post_cleanup:                  # 清理后处理
+    normalize_spaces: true       # 标准化空格
+    trim: true                   # 移除首尾空白
+    lowercase: false             # 转为小写
+
+# === 输出文件 ===
+output:
+  formats:                       # 启用的输出格式
+    - "txt"                      # TXT格式
+    - "json"                     # JSON格式
+  filename_pattern: "{timestamp}_{type}"  # 文件名模式
+  directory_structure: "country/model"  # 目录结构：flat（扁平）、country（按国家）、country/model（按国家和模特）
+  overwrite_existing: true       # 是否覆盖已存在的文件
+  encoding: "utf-8"              # 输出文件编码
+  max_file_size: -1              # 单个文件最大大小（字节）- -1表示无限制
+  compress: false                # 是否压缩输出文件
+  retention_days: -1             # 保留天数 - -1表示无限制
+
+# === 错误处理 ===
+error_handling:
+  strategy: "continue"           # 错误处理策略：continue（继续）、stop（停止）
+  max_retries: 3                 # 最大重试次数
+  retry_delay: 5                 # 重试间隔（秒）
+  error_categories:              # 错误分类和处理
+    network: "retry"             # 网络错误：重试
+    parsing: "skip"              # 解析错误：跳过
+    permission: "warn"           # 权限错误：警告
+  alert_threshold: 10            # 错误告警阈值
+  collect_statistics: true       # 是否收集错误统计
+  detailed_error_reports: true   # 是否生成详细的错误报告
+"""

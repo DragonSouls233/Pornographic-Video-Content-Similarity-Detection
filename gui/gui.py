@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import json
+import yaml
 import os
 import threading
 import queue
@@ -13,6 +14,9 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 # 导入内置浏览器模块
 from browser import BrowserTab
+
+# 导入默认配置模板
+from gui.config_template import DEFAULT_CONFIG
 
 class ModelManagerGUI:
     def __init__(self, root):
@@ -452,14 +456,32 @@ class ModelManagerGUI:
     def load_config(self):
         """加载配置文件"""
         try:
-            import yaml
+            if not os.path.exists("config.yaml"):
+                # 如果配置文件不存在，生成默认配置文件
+                with open("config.yaml", "w", encoding="utf-8") as f:
+                    f.write(DEFAULT_CONFIG)
+                messagebox.showinfo("提示", "配置文件不存在，已生成默认配置文件。")
+            
             with open("config.yaml", "r", encoding="utf-8") as f:
                 config_text = f.read()
                 config_text = config_text.replace('\\', '\\\\')
-                return yaml.safe_load(config_text)
+                config = yaml.safe_load(config_text)
+                
+                # 检查配置文件结构是否完整
+                if not config:
+                    # 如果配置文件为空，生成默认配置文件
+                    with open("config.yaml", "w", encoding="utf-8") as f:
+                        f.write(DEFAULT_CONFIG)
+                    messagebox.showinfo("提示", "配置文件结构不完整，已生成默认配置文件。")
+                    config = yaml.safe_load(DEFAULT_CONFIG)
+                
+                return config
         except Exception as e:
-            messagebox.showerror("错误", f"配置文件加载失败: {e}")
-            return {}
+            # 如果加载失败，生成默认配置文件
+            with open("config.yaml", "w", encoding="utf-8") as f:
+                f.write(DEFAULT_CONFIG)
+            messagebox.showinfo("提示", f"配置文件加载失败: {e}\n已生成默认配置文件。")
+            return yaml.safe_load(DEFAULT_CONFIG)
     
     def load_models(self):
         """加载模特数据"""
@@ -1126,14 +1148,109 @@ class ModelManagerGUI:
                     "https": self.generate_proxy_url(proxy_enabled_var.get(), proxy_type_var.get(), proxy_host_var.get().strip(), proxy_port_var.get().strip(), proxy_id_var.get().strip(), proxy_password_var.get().strip())
                 }
                 
-                # 保存配置
+                # 保存配置 - 使用默认模板，保留注释
+                # 1. 加载默认配置模板
+                default_config = yaml.safe_load(DEFAULT_CONFIG)
+                
+                # 2. 更新默认配置中的字段
+                def update_config(target, source):
+                    for key, value in source.items():
+                        if isinstance(value, dict) and key in target and isinstance(target[key], dict):
+                            update_config(target[key], value)
+                        else:
+                            target[key] = value
+                
+                update_config(default_config, config)
+                
+                # 3. 生成带注释的配置文件
+                # 读取默认模板的文本内容
+                lines = DEFAULT_CONFIG.split('\n')
+                output_lines = []
+                current_path = []
+                
+                def get_value_from_config(path):
+                    value = default_config
+                    for key in path:
+                        if isinstance(value, dict) and key in value:
+                            value = value[key]
+                        else:
+                            return None
+                    return value
+                
+                for line in lines:
+                    stripped_line = line.strip()
+                    
+                    # 处理注释行
+                    if stripped_line.startswith('#'):
+                        output_lines.append(line)
+                    # 处理空行
+                    elif not stripped_line:
+                        output_lines.append(line)
+                    # 处理键值对
+                    elif ':' in stripped_line and not stripped_line.endswith(':'):
+                        parts = stripped_line.split(':', 1)
+                        key = parts[0].strip()
+                        # 检查当前路径
+                        while current_path and not get_value_from_config(current_path + [key]):
+                            current_path.pop()
+                        # 获取值
+                        value = get_value_from_config(current_path + [key])
+                        if value is not None:
+                            # 更新值
+                            if isinstance(value, bool):
+                                value_str = str(value).lower()
+                            elif isinstance(value, list):
+                                value_str = '[' + ', '.join(f'"{item}"' for item in value) + ']'
+                            else:
+                                value_str = str(value)
+                            # 保留注释
+                            comment_part = parts[1].split('#', 1) if '#' in parts[1] else ['', '']
+                            if comment_part[1]:
+                                output_lines.append(f"{parts[0]}: {value_str}  # {comment_part[1].strip()}")
+                            else:
+                                output_lines.append(f"{parts[0]}: {value_str}")
+                        else:
+                            output_lines.append(line)
+                    # 处理字典键
+                    elif stripped_line.endswith(':'):
+                        key = stripped_line[:-1].strip()
+                        # 检查当前路径
+                        while current_path and not get_value_from_config(current_path + [key]):
+                            current_path.pop()
+                        # 检查是否存在该键
+                        if get_value_from_config(current_path + [key]) is not None:
+                            current_path.append(key)
+                        output_lines.append(line)
+                    # 处理列表项
+                    elif stripped_line.startswith('- '):
+                        # 检查当前路径
+                        if current_path:
+                            parent_value = get_value_from_config(current_path)
+                            if isinstance(parent_value, list):
+                                # 这里简化处理，直接保留原始行
+                                output_lines.append(line)
+                            else:
+                                output_lines.append(line)
+                        else:
+                            output_lines.append(line)
+                    else:
+                        output_lines.append(line)
+                
+                # 4. 写入配置文件
                 with open("config.yaml", "w", encoding="utf-8") as f:
-                    yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+                    f.write('\n'.join(output_lines))
                 
                 messagebox.showinfo("成功", "配置已保存")
                 dialog.destroy()
             except Exception as e:
-                messagebox.showerror("错误", f"保存配置失败: {e}")
+                # 如果复杂保存失败，使用简单方法保存
+                try:
+                    with open("config.yaml", "w", encoding="utf-8") as f:
+                        yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+                    messagebox.showinfo("成功", "配置已保存")
+                    dialog.destroy()
+                except Exception as e2:
+                    messagebox.showerror("错误", f"保存配置失败: {e}")
         
         ttk.Button(button_frame, text="保存", command=save_config, width=15).pack(side=tk.RIGHT, padx=10)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.RIGHT, padx=10)

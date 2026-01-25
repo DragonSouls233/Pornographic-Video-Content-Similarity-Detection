@@ -60,11 +60,36 @@ class BrowserTab:
             self.browser.load_website("https://www.google.com")
             self.browser_available = True
         except ImportError:
-            # 如果没有安装tkinterweb，显示提示信息
+            # 如果没有安装tkinterweb，显示一个简单的浏览器界面
             self.browser_available = False
-            ttk.Label(self.browser_frame, text="内置浏览器需要安装 tkinterweb 库", font=("SimHei", 12)).pack(pady=20)
-            ttk.Label(self.browser_frame, text="请运行: pip install tkinterweb", font=("SimHei", 10)).pack(pady=5)
-            ttk.Button(self.browser_frame, text="使用系统浏览器打开", command=self.open_system_browser).pack(pady=10)
+            # 创建一个简单的文本框来显示代理信息
+            info_frame = ttk.Frame(self.browser_frame)
+            info_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+            
+            ttk.Label(info_frame, text="代理测试浏览器", font=("SimHei", 14, "bold")).pack(pady=10)
+            ttk.Label(info_frame, text="当前代理配置:", font=("SimHei", 12)).pack(pady=5, anchor=tk.W)
+            
+            # 加载配置，显示代理信息
+            config = self.load_config()
+            proxy_config = config.get("network", {}).get("proxy", {})
+            
+            proxy_info = f"启用: {proxy_config.get('enabled', False)}\n"
+            proxy_info += f"类型: {proxy_config.get('type', 'http')}\n"
+            proxy_info += f"主机: {proxy_config.get('host', '127.0.0.1')}\n"
+            proxy_info += f"端口: {proxy_config.get('port', '10808')}\n"
+            proxy_info += f"HTTP代理: {proxy_config.get('http', '')}\n"
+            proxy_info += f"HTTPS代理: {proxy_config.get('https', '')}\n"
+            
+            info_text = tk.Text(info_frame, width=80, height=15, wrap=tk.WORD)
+            info_text.pack(fill=tk.BOTH, expand=True, pady=10)
+            info_text.insert(tk.END, proxy_info)
+            info_text.config(state=tk.DISABLED)
+            
+            ttk.Label(info_frame, text="测试代理是否成功:", font=("SimHei", 12)).pack(pady=5, anchor=tk.W)
+            ttk.Label(info_frame, text="1. 确保v2rayN等代理工具已启动并连接", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
+            ttk.Label(info_frame, text="2. 在代理设置中配置正确的代理信息", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
+            ttk.Label(info_frame, text="3. 点击'测试代理连接'按钮测试连接", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
+            ttk.Label(info_frame, text="4. 如果测试成功，说明代理配置正确", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
     
     def setup_proxy(self):
         """设置浏览器代理"""
@@ -102,10 +127,12 @@ class BrowserTab:
                     print("网页加载成功")
                 except Exception as e:
                     print(f"加载网页失败: {e}")
-                    messagebox.showerror("错误", f"加载网页失败: {e}")
-                    # 如果失败，尝试使用系统浏览器
+                    # 如果失败，显示提示信息
+                    messagebox.showinfo("提示", f"加载网页失败，尝试使用系统浏览器打开。\n错误: {e}")
                     self.open_system_browser(url)
             else:
+                # 如果tkinterweb不可用，显示提示信息并使用系统浏览器
+                messagebox.showinfo("提示", "内置浏览器不可用，尝试使用系统浏览器打开。")
                 self.open_system_browser(url)
     
     def browser_refresh(self):
