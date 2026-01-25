@@ -32,7 +32,7 @@ cd "F:\测试"
 
 REM 使用PyInstaller打包
 echo 执行打包命令...
-pyinstaller --onefile --windowed --name "模特查重管理系统" gui/gui.py
+pyinstaller --onefile --windowed --name "模特查重管理系统" --add-data "core;core" gui/gui.py
 
 echo 
 

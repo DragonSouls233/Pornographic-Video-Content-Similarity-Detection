@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Set, List, Tuple, Dict, Optional
 
 # 导入模块化的功能
-from modules.common.common import (
+from core.modules.common.common import (
     setup_logging,
     load_config,
     load_models,
@@ -22,23 +22,24 @@ from modules.common.common import (
     record_missing_videos
 )
 
-from modules.pronhub.pronhub import (
+from core.modules.pronhub.pronhub import (
     fetch_with_requests_pronhub,
     scan_pronhub_models
 )
 
-from modules.javdb.javdb import (
+from core.modules.javdb.javdb import (
     fetch_with_requests_javdb,
     scan_javdb_models
 )
 
 # --- 主程序 ---
-def main(module_arg="auto", local_dirs=None):
+def main(module_arg="auto", local_dirs=None, scraper="selenium"):
     """主程序入口
     
     Args:
         module_arg: 模块类型参数，可选值: "auto", "pronhub", "javdb"
         local_dirs: 本地目录路径列表，如果提供则覆盖配置文件中的设置
+        scraper: 抓取工具，可选值: "selenium", "playwright", "drissionpage", "zendriver"
     """
     try:
         # 模块选择
@@ -57,6 +58,9 @@ def main(module_arg="auto", local_dirs=None):
         if local_dirs:
             config['local_roots'] = local_dirs
         
+        # 如果提供了抓取工具，则覆盖配置
+        config['scraper'] = scraper
+        
         # 设置日志
         logger, missing_logger, countries_dir = setup_logging(config['log_dir'])
         
@@ -66,7 +70,7 @@ def main(module_arg="auto", local_dirs=None):
         logger.info(f"模特数量: {len(models)}")
         logger.info(f"本地目录: {config['local_roots']}")
         logger.info(f"输出目录: {config['output_dir']}")
-        logger.info(f"使用Selenium: {config.get('use_selenium', True)}")
+        logger.info(f"抓取工具: {config.get('scraper', 'selenium')}")
         logger.info(f"最大翻页: {config.get('max_pages', '无限制')}")
         logger.info(f"运行模块: {'PRONHUB' if module_type == 1 else 'JAVDB' if module_type == 2 else '自动模式'}")
         logger.info("=" * 60)

@@ -191,9 +191,11 @@ class ModelManagerGUI:
         # 初始化默认目录
         self.dir_listbox.insert(tk.END, "F:\\作品")
         
-        # 使用Selenium选项
-        self.use_selenium_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(config_frame, text="使用Selenium", variable=self.use_selenium_var).pack(anchor=tk.W, pady=2)
+        # 抓取工具选择
+        ttk.Label(config_frame, text="抓取工具: ").pack(side=tk.LEFT)
+        self.scraper_var = tk.StringVar(value="selenium")
+        scraper_combobox = ttk.Combobox(config_frame, textvariable=self.scraper_var, values=["selenium", "playwright", "drissionpage", "zendriver"], width=15)
+        scraper_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
         # 最大翻页
         ttk.Label(config_frame, text="最大翻页: ").pack(side=tk.LEFT)
@@ -579,20 +581,38 @@ class ModelManagerGUI:
     def run_script(self):
         """在线程中运行查重脚本"""
         try:
-            # 导入核心模块
-            from core.core import main
-            
             # 获取所有目录
             dirs = [self.dir_listbox.get(i) for i in range(self.dir_listbox.size())]
             if not dirs:
                 messagebox.showinfo("提示", "请至少添加一个本地目录")
                 return
             
-            # 运行脚本
-            main(self.module_var.get(), dirs)
+            # 导入核心模块（使用动态导入方式）
+            import sys
+            import os
+            import importlib.util
             
-            # 发送完成消息
-            self.queue.put(("completed", "运行完成"))
+            # 获取核心模块路径
+            if hasattr(sys, '_MEIPASS'):
+                # 打包后的环境
+                core_py_path = os.path.join(sys._MEIPASS, 'core', 'core.py')
+            else:
+                # 开发环境
+                core_py_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'core', 'core.py')
+            
+            # 动态导入core模块
+            spec = importlib.util.spec_from_file_location("core.core", core_py_path)
+            if spec and spec.loader:
+                core_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(core_module)
+                
+                # 运行脚本
+                core_module.main(self.module_var.get(), dirs, self.scraper_var.get())
+                
+                # 发送完成消息
+                self.queue.put(("completed", "运行完成"))
+            else:
+                raise Exception(f"无法找到核心模块: {core_py_path}")
         except Exception as e:
             self.queue.put(("error", str(e)))
     

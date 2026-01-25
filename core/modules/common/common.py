@@ -65,7 +65,7 @@ def load_config(config_path: str = "config.yaml") -> dict:
                     r"(?i)\(.*?\)",
                     r"(?i)\{.*?\}"
                 ],
-                "use_selenium": True,
+                "scraper": "selenium",
                 "max_pages": -1,
                 "delay_between_pages": {
                     "min": 2.0,
