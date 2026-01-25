@@ -6,6 +6,10 @@ import threading
 import queue
 import time
 from datetime import datetime
+import sys
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 class ModelManagerGUI:
     def __init__(self, root):
@@ -153,6 +157,12 @@ class ModelManagerGUI:
         # 运行配置
         config_frame = ttk.LabelFrame(frame, text="运行配置", padding="10")
         config_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # 模块选择
+        ttk.Label(config_frame, text="模块选择: ").pack(side=tk.LEFT)
+        self.module_var = tk.StringVar(value="auto")
+        module_combobox = ttk.Combobox(config_frame, textvariable=self.module_var, values=["auto", "pronhub", "javdb"], width=10)
+        module_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
         # 使用Selenium选项
         self.use_selenium_var = tk.BooleanVar(value=True)
@@ -534,16 +544,11 @@ class ModelManagerGUI:
     def run_script(self):
         """在线程中运行查重脚本"""
         try:
-            # 导入脚本模块
-            import 脚本
-            
-            # 更新配置
-            config = 脚本.load_config()
-            config['use_selenium'] = self.use_selenium_var.get()
-            config['max_pages'] = int(self.max_pages_var.get())
+            # 导入核心模块
+            from core.core import main
             
             # 运行脚本
-            脚本.main()
+            main(self.module_var.get())
             
             # 发送完成消息
             self.queue.put(("completed", "运行完成"))

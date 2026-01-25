@@ -33,22 +33,20 @@ from modules.javdb.javdb import (
 )
 
 # --- 主程序 ---
-def main():
-    """主程序入口"""
+def main(module_arg="auto"):
+    """主程序入口
+    
+    Args:
+        module_arg: 模块类型参数，可选值: "auto", "pronhub", "javdb"
+    """
     try:
         # 模块选择
-        print("========================================")
-        print("请选择要运行的模块:")
-        print("1. PRONHUB模块 (带[Channel]前缀的模特)")
-        print("2. JAVDB模块 (不带前缀的模特)")
-        print("3. 自动模式 (同时支持两种格式)")
-        print("========================================")
-        
-        choice = input("请输入选项编号 (1-3): ").strip()
-        while choice not in ['1', '2', '3']:
-            choice = input("输入无效，请重新输入选项编号 (1-3): ").strip()
-        
-        module_type = int(choice)
+        if module_arg == "pronhub":
+            module_type = 1
+        elif module_arg == "javdb":
+            module_type = 2
+        else:  # auto
+            module_type = 3
         
         # 加载配置
         config = load_config()

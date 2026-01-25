@@ -1,0 +1,1 @@
+# JAVDB module initialization
