@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import webbrowser
 import yaml
+import time
 
 class BrowserTab:
     """内置浏览器标签页类"""
@@ -57,7 +58,18 @@ class BrowserTab:
             self.browser.pack(fill=tk.BOTH, expand=True)
             # 加载配置，设置代理
             self.setup_proxy()
-            self.browser.load_website("https://www.google.com")
+            # 检查代理是否支持
+            config = self.load_config()
+            proxy_config = config.get("network", {}).get("proxy", {})
+            
+            if proxy_config.get("enabled", False):
+                # 显示提示信息
+                messagebox.showinfo("提示", "当前版本的tkinterweb不支持代理设置，将使用系统浏览器打开以测试代理。")
+                # 直接使用系统浏览器
+                self.open_system_browser("https://www.google.com")
+            else:
+                # 没有启用代理，尝试使用内置浏览器
+                self.browser.load_website("https://www.google.com")
             self.browser_available = True
         except ImportError:
             # 如果没有安装tkinterweb，显示一个简单的浏览器界面
@@ -98,18 +110,46 @@ class BrowserTab:
             config = self.load_config()
             proxy_config = config.get("network", {}).get("proxy", {})
             
+            print(f"代理配置: {proxy_config}")
+            
             # 如果启用了代理
             if proxy_config.get("enabled", False):
                 http_proxy = proxy_config.get("http", "")
                 https_proxy = proxy_config.get("https", "")
                 
+                print(f"HTTP代理: {http_proxy}")
+                print(f"HTTPS代理: {https_proxy}")
+                
                 if http_proxy:
-                    # 设置tkinterweb的代理
-                    if hasattr(self.browser, 'set_proxy'):
-                        self.browser.set_proxy(http_proxy)
-                        # 尝试设置HTTPS代理（如果tkinterweb支持）
-                        if hasattr(self.browser, 'set_https_proxy'):
-                            self.browser.set_https_proxy(https_proxy if https_proxy else http_proxy)
+                    # 尝试设置tkinterweb的代理（不同版本的API可能不同）
+                    print(f"尝试设置代理: {http_proxy}")
+                    
+                    # 方法1: 直接设置代理属性
+                    if hasattr(self.browser, 'proxy'):
+                        self.browser.proxy = http_proxy
+                        print("使用属性设置代理成功")
+                    # 方法2: 使用set_proxy方法
+                    elif hasattr(self.browser, 'set_proxy'):
+                        try:
+                            self.browser.set_proxy(http_proxy)
+                            print("使用set_proxy方法设置代理成功")
+                        except Exception as e:
+                            print(f"set_proxy方法调用失败: {e}")
+                    # 方法3: 检查是否有其他代理相关属性
+                    elif hasattr(self.browser, '_proxy'):
+                        self.browser._proxy = http_proxy
+                        print("使用_proxy属性设置代理成功")
+                    # 方法4: 检查是否有network属性
+                    elif hasattr(self.browser, 'network'):
+                        try:
+                            self.browser.network.set_proxy(http_proxy)
+                            print("使用network.set_proxy设置代理成功")
+                        except Exception as e:
+                            print(f"network.set_proxy失败: {e}")
+                    else:
+                        print("tkinterweb不支持代理设置")
+                        # 显示提示信息
+                        messagebox.showinfo("提示", "当前版本的tkinterweb不支持代理设置，将使用系统默认网络连接。")
         except Exception as e:
             print(f"设置代理失败: {e}")
     
@@ -123,8 +163,23 @@ class BrowserTab:
                     self.setup_proxy()
                     print(f"尝试加载 URL: {url}")
                     # 尝试加载网页
+                    start_time = time.time()
                     self.browser.load_website(url)
-                    print("网页加载成功")
+                    end_time = time.time()
+                    print(f"网页加载成功，耗时: {end_time - start_time:.2f}秒")
+                    
+                    # 检查是否加载成功
+                    try:
+                        page_title = self.browser.get_title()
+                        print(f"页面标题: {page_title}")
+                        if "Oops" in page_title or "Error" in page_title or "找不到页面" in page_title:
+                            print("页面加载失败，显示错误信息")
+                            # 尝试使用系统浏览器
+                            messagebox.showinfo("提示", "内置浏览器加载失败，尝试使用系统浏览器打开。")
+                            self.open_system_browser(url)
+                    except Exception as e:
+                        print(f"获取页面标题失败: {e}")
+                        
                 except Exception as e:
                     print(f"加载网页失败: {e}")
                     # 如果失败，显示提示信息

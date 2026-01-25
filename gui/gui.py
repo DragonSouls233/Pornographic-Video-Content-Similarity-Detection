@@ -11,12 +11,12 @@ import sys
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
-a
+
 # 导入内置浏览器模块
 from browser import BrowserTab
 
 # 导入默认配置模板
-from gui.config_template import DEFAULT_CONFIG
+from config_template import DEFAULT_CONFIG
 
 class ModelManagerGUI:
     def __init__(self, root):

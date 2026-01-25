@@ -26,16 +26,21 @@ def setup_logging(log_dir: str, config_name: str = "main"):
     # 缺失视频专用日志文件
     missing_log_file = os.path.join(log_dir, f"missing_{datetime.now().strftime('%Y%m%d')}.log")
     
-    # 配置根日志器
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s | %(levelname)-8s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.FileHandler(main_log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
+    # 使用根日志器，这样GUI的QueueHandler也能捕获到日志
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # 避免重复添加处理器
+    if not logger.handlers:
+        # 添加文件处理器
+        file_handler = logging.FileHandler(main_log_file, encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
+        logger.addHandler(file_handler)
+        
+        # 添加控制台处理器
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
+        logger.addHandler(stream_handler)
     
     # 创建专门记录缺失视频的日志器
     missing_logger = logging.getLogger('missing_logger')
@@ -47,7 +52,7 @@ def setup_logging(log_dir: str, config_name: str = "main"):
         missing_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s'))
         missing_logger.addHandler(missing_handler)
     
-    return logging.getLogger(__name__), missing_logger, countries_dir
+    return logger, missing_logger, countries_dir
 
 # --- 配置加载 ---
 def load_config(config_path: str = "config.yaml") -> dict:
