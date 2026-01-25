@@ -22,6 +22,17 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
         'Upgrade-Insecure-Requests': '1'
     }
     
+    # 从配置中获取代理设置
+    proxies = {}
+    if config.get('proxy', {}).get('enabled', False):
+        http_proxy = config['proxy'].get('http', '')
+        https_proxy = config['proxy'].get('https', '')
+        if http_proxy:
+            proxies['http'] = http_proxy
+        if https_proxy:
+            proxies['https'] = https_proxy
+        logger.info(f"  JAVDB - 使用代理: {proxies}")
+    
     all_titles = set()
     title_to_url = {}
     page_num = 1
@@ -44,7 +55,7 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
             time.sleep(random.uniform(2.0, 4.0))  # JAVDB可能需要更长的延时
             
             try:
-                resp = requests.get(page_url, headers=headers, timeout=20)
+                resp = requests.get(page_url, headers=headers, timeout=20, proxies=proxies)
                 resp.raise_for_status()
                 
                 # 检查编码

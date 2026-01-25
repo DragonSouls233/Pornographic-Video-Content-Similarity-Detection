@@ -71,7 +71,12 @@ def load_config(config_path: str = "config.yaml") -> dict:
                     "min": 2.0,
                     "max": 3.5
                 },
-                "retry_on_fail": 2
+                "retry_on_fail": 2,
+                "proxy": {
+                    "enabled": False,
+                    "http": "",
+                    "https": ""
+                }
             }
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False)

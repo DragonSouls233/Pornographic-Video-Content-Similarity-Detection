@@ -188,8 +188,12 @@ class ModelManagerGUI:
         # 删除目录按钮
         ttk.Button(btn_frame, text="删除", command=self.remove_local_dir, width=10).pack(fill=tk.X, pady=2)
         
-        # 初始化默认目录
-        self.dir_listbox.insert(tk.END, "F:\\作品")
+        # 加载保存的目录列表
+        self.load_local_dirs()
+        # 如果没有保存的目录，添加默认目录
+        if self.dir_listbox.size() == 0:
+            self.dir_listbox.insert(tk.END, "F:\\作品")
+            self.save_local_dirs()
         
         # 抓取工具选择
         ttk.Label(config_frame, text="抓取工具: ").pack(side=tk.LEFT)
@@ -596,9 +600,8 @@ class ModelManagerGUI:
             # 配置日志捕获
             class QueueHandler(logging.Handler):
                 def emit(self, record):
-                    if self.running:
-                        msg = self.format(record)
-                        self.queue.put(("log", msg))
+                    msg = self.format(record)
+                    self.queue.put(("log", msg))
             
             # 获取核心模块路径
             if hasattr(sys, '_MEIPASS'):
@@ -679,16 +682,141 @@ class ModelManagerGUI:
         except queue.Empty:
             pass
         
-        # 继续轮询
-        if self.running:
-            self.root.after(100, self.check_queue)
+        # 继续轮询，不管是否正在运行，确保所有日志都能被处理
+        self.root.after(100, self.check_queue)
     
     def open_config(self):
-        """打开配置文件"""
+        """打开配置界面"""
+        self.show_config_dialog()
+    
+    def show_config_dialog(self):
+        """显示配置对话框"""
+        # 加载当前配置
         try:
-            os.startfile("config.yaml")
+            import yaml
+            with open("config.yaml", "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
         except Exception as e:
-            messagebox.showerror("错误", f"无法打开配置文件: {e}")
+            messagebox.showerror("错误", f"加载配置文件失败: {e}")
+            return
+        
+        # 创建对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title("配置设置")
+        dialog.geometry("600x500")
+        dialog.resizable(False, False)
+        
+        # 居中显示
+        dialog.update_idletasks()
+        x = (self.root.winfo_screenwidth() - dialog.winfo_width()) // 2
+        y = (self.root.winfo_screenheight() - dialog.winfo_height()) // 2
+        dialog.geometry(f"600x500+{x}+{y}")
+        
+        # 创建主框架
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 创建笔记本（标签页）
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # 基本设置标签页
+        basic_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(basic_frame, text="基本设置")
+        
+        # 输出目录
+        ttk.Label(basic_frame, text="输出目录: ").grid(row=0, column=0, sticky=tk.W, pady=5)
+        output_dir_var = tk.StringVar(value=config.get("output_dir", "output"))
+        ttk.Entry(basic_frame, textvariable=output_dir_var, width=40).grid(row=0, column=1, sticky=tk.W, pady=5)
+        
+        # 日志目录
+        ttk.Label(basic_frame, text="日志目录: ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        log_dir_var = tk.StringVar(value=config.get("log_dir", "log"))
+        ttk.Entry(basic_frame, textvariable=log_dir_var, width=40).grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        # 视频扩展名
+        ttk.Label(basic_frame, text="视频扩展名: ").grid(row=2, column=0, sticky=tk.W, pady=5)
+        video_exts_var = tk.StringVar(value=", ".join(config.get("video_extensions", ["mp4", "avi", "mov"])))
+        ttk.Entry(basic_frame, textvariable=video_exts_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=5)
+        ttk.Label(basic_frame, text="（用逗号分隔）").grid(row=2, column=2, sticky=tk.W, pady=5)
+        
+        # 最大翻页
+        ttk.Label(basic_frame, text="最大翻页: ").grid(row=3, column=0, sticky=tk.W, pady=5)
+        max_pages_var = tk.StringVar(value=str(config.get("max_pages", -1)))
+        ttk.Entry(basic_frame, textvariable=max_pages_var, width=10).grid(row=3, column=1, sticky=tk.W, pady=5)
+        ttk.Label(basic_frame, text="（-1表示无限制）").grid(row=3, column=2, sticky=tk.W, pady=5)
+        
+        # 延时设置
+        ttk.Label(basic_frame, text="页面间延时: ").grid(row=4, column=0, sticky=tk.W, pady=5)
+        delay_min_var = tk.StringVar(value=str(config.get("delay_between_pages", {}).get("min", 2.0)))
+        delay_max_var = tk.StringVar(value=str(config.get("delay_between_pages", {}).get("max", 3.5)))
+        ttk.Label(basic_frame, text="最小: ").grid(row=4, column=1, sticky=tk.W, pady=5)
+        ttk.Entry(basic_frame, textvariable=delay_min_var, width=8).grid(row=4, column=1, sticky=tk.W, padx=(40, 0), pady=5)
+        ttk.Label(basic_frame, text="最大: ").grid(row=4, column=1, sticky=tk.W, padx=(120, 0), pady=5)
+        ttk.Entry(basic_frame, textvariable=delay_max_var, width=8).grid(row=4, column=1, sticky=tk.W, padx=(160, 0), pady=5)
+        
+        # 重试次数
+        ttk.Label(basic_frame, text="失败重试次数: ").grid(row=5, column=0, sticky=tk.W, pady=5)
+        retry_var = tk.StringVar(value=str(config.get("retry_on_fail", 2)))
+        ttk.Entry(basic_frame, textvariable=retry_var, width=10).grid(row=5, column=1, sticky=tk.W, pady=5)
+        
+        # 代理设置标签页
+        proxy_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(proxy_frame, text="代理设置")
+        
+        # 启用代理
+        proxy_enabled_var = tk.BooleanVar(value=config.get("proxy", {}).get("enabled", False))
+        ttk.Checkbutton(proxy_frame, text="启用代理", variable=proxy_enabled_var).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=10)
+        
+        # HTTP代理
+        ttk.Label(proxy_frame, text="HTTP代理: ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        http_proxy_var = tk.StringVar(value=config.get("proxy", {}).get("http", ""))
+        ttk.Entry(proxy_frame, textvariable=http_proxy_var, width=40).grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        # HTTPS代理
+        ttk.Label(proxy_frame, text="HTTPS代理: ").grid(row=2, column=0, sticky=tk.W, pady=5)
+        https_proxy_var = tk.StringVar(value=config.get("proxy", {}).get("https", ""))
+        ttk.Entry(proxy_frame, textvariable=https_proxy_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=5)
+        
+        # 按钮框架
+        button_frame = ttk.Frame(main_frame, padding="10")
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # 保存按钮
+        def save_config():
+            try:
+                # 更新配置
+                config["output_dir"] = output_dir_var.get().strip()
+                config["log_dir"] = log_dir_var.get().strip()
+                config["video_extensions"] = [ext.strip() for ext in video_exts_var.get().split(",") if ext.strip()]
+                config["max_pages"] = int(max_pages_var.get())
+                config["delay_between_pages"] = {
+                    "min": float(delay_min_var.get()),
+                    "max": float(delay_max_var.get())
+                }
+                config["retry_on_fail"] = int(retry_var.get())
+                config["proxy"] = {
+                    "enabled": proxy_enabled_var.get(),
+                    "http": http_proxy_var.get().strip(),
+                    "https": https_proxy_var.get().strip()
+                }
+                
+                # 保存配置
+                with open("config.yaml", "w", encoding="utf-8") as f:
+                    yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+                
+                messagebox.showinfo("成功", "配置已保存")
+                dialog.destroy()
+            except Exception as e:
+                messagebox.showerror("错误", f"保存配置失败: {e}")
+        
+        ttk.Button(button_frame, text="保存", command=save_config, width=15).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.RIGHT, padx=10)
+        
+        # 等待对话框关闭
+        dialog.transient(self.root)
+        dialog.grab_set()
+        self.root.wait_window(dialog)
     
     def open_cache_dir(self):
         """打开缓存目录"""
@@ -788,12 +916,36 @@ class ModelManagerGUI:
                     return
             # 添加到列表
             self.dir_listbox.insert(tk.END, directory)
+            # 保存目录列表
+            self.save_local_dirs()
+    
+    def save_local_dirs(self):
+        """保存本地目录列表"""
+        try:
+            dirs = [self.dir_listbox.get(i) for i in range(self.dir_listbox.size())]
+            with open("local_dirs.json", "w", encoding="utf-8") as f:
+                json.dump(dirs, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            pass
+    
+    def load_local_dirs(self):
+        """加载本地目录列表"""
+        try:
+            if os.path.exists("local_dirs.json"):
+                with open("local_dirs.json", "r", encoding="utf-8") as f:
+                    dirs = json.load(f)
+                    for directory in dirs:
+                        self.dir_listbox.insert(tk.END, directory)
+        except Exception as e:
+            pass
     
     def remove_local_dir(self):
         """删除选中的本地目录"""
         selected = self.dir_listbox.curselection()
         if selected:
             self.dir_listbox.delete(selected)
+            # 保存目录列表
+            self.save_local_dirs()
     
     def show_about(self):
         """显示关于信息"""
