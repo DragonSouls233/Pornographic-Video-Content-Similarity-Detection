@@ -55,7 +55,7 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
             time.sleep(random.uniform(2.0, 4.0))  # JAVDB可能需要更长的延时
             
             try:
-                resp = requests.get(page_url, headers=headers, timeout=20, proxies=proxies)
+                resp = requests.get(page_url, headers=headers, timeout=20, proxies=proxies, verify=False)
                 resp.raise_for_status()
                 
                 # 检查编码
