@@ -164,6 +164,12 @@ class ModelManagerGUI:
         module_combobox = ttk.Combobox(config_frame, textvariable=self.module_var, values=["auto", "pronhub", "javdb"], width=10)
         module_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
+        # 本地目录选择
+        ttk.Label(config_frame, text="本地目录: ").pack(side=tk.LEFT)
+        self.local_dir_var = tk.StringVar(value="F:\\作品")
+        ttk.Entry(config_frame, textvariable=self.local_dir_var, width=30).pack(side=tk.LEFT, padx=(5, 5))
+        ttk.Button(config_frame, text="浏览", command=self.browse_local_dir).pack(side=tk.LEFT, padx=(5, 20))
+        
         # 使用Selenium选项
         self.use_selenium_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(config_frame, text="使用Selenium", variable=self.use_selenium_var).pack(anchor=tk.W, pady=2)
@@ -556,7 +562,7 @@ class ModelManagerGUI:
             from core.core import main
             
             # 运行脚本
-            main(self.module_var.get())
+            main(self.module_var.get(), self.local_dir_var.get())
             
             # 发送完成消息
             self.queue.put(("completed", "运行完成"))
@@ -687,6 +693,12 @@ class ModelManagerGUI:
 """
         
         messagebox.showinfo("使用说明", help_text)
+    
+    def browse_local_dir(self):
+        """浏览选择本地目录"""
+        directory = filedialog.askdirectory(title="选择本地视频目录")
+        if directory:
+            self.local_dir_var.set(directory)
     
     def show_about(self):
         """显示关于信息"""

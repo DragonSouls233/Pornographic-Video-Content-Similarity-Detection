@@ -33,11 +33,12 @@ from modules.javdb.javdb import (
 )
 
 # --- 主程序 ---
-def main(module_arg="auto"):
+def main(module_arg="auto", local_dir=None):
     """主程序入口
     
     Args:
         module_arg: 模块类型参数，可选值: "auto", "pronhub", "javdb"
+        local_dir: 本地目录路径，如果提供则覆盖配置文件中的设置
     """
     try:
         # 模块选择
@@ -51,6 +52,10 @@ def main(module_arg="auto"):
         # 加载配置
         config = load_config()
         models = load_models()
+        
+        # 如果提供了本地目录，则覆盖配置
+        if local_dir:
+            config['local_roots'] = [local_dir]
         
         # 设置日志
         logger, missing_logger, countries_dir = setup_logging(config['log_dir'])
