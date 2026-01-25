@@ -6,9 +6,7 @@
 # 本地视频文件根目录列表，系统将从这些目录开始扫描视频文件
 # 示例目录配置，请根据实际情况修改为您的本地目录路径
 local_roots:
-  - "D:\\Videos\\Examples\\Category1"       # 示例目录1
-  - "D:\\Videos\\Examples\\Category2"       # 示例目录2
-  - "D:\\Videos\\Examples\\Category3"       # 示例目录3
+  - "test_videos"       # 测试目录
 
 # === 网页抓取设置 ===
 use_selenium: true            # 是否使用Selenium浏览器进行网页抓取（true=启用）

@@ -169,14 +169,14 @@ def fetch_with_requests_pronhub(url: str, logger, max_pages: int = -1, config: d
 def clean_pronhub_title(title: str, patterns: List[str]) -> str:
     """清理PRONHUB视频标题"""
     # 先应用通用清理
-    from core.modules.common.common import clean_filename
+    from ..common.common import clean_filename
     cleaned = clean_filename(title, patterns)
     
     # PRONHUB特定的清理
     # 移除PRONHUB特有的标记
     cleaned = re.sub(r'\b(pronhub|PH)\b', '', cleaned, flags=re.IGNORECASE)
     # 移除PRONHUB特有的标签格式
-    cleaned = re.sub(r'\[(?i)pronhub\]\s*', '', cleaned)
+    cleaned = re.sub(r'(?i)\[pronhub\]\s*', '', cleaned)
     # 再次清理空格
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     
@@ -188,7 +188,7 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
     扫描PRONHUB格式的本地模特目录（带[Channel]前缀）
     返回(模特名, 模特根路径, 原始目录名, 国家)元组列表
     """
-    from core.modules.common.common import clean_filename
+    from ..common.common import clean_filename
     
     matched = []
     
@@ -204,6 +204,11 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
         try:
             # 递归扫描所有子目录
             for current_dir, _, subdirs in os.walk(root):
+                # 跳过根目录本身
+                if current_dir == root:
+                    logger.debug(f"  PRONHUB - 跳过根目录: {os.path.basename(current_dir)}")
+                    continue
+                
                 # 检查当前目录是否是PRONHUB格式的模特目录（带前缀）
                 dir_name = os.path.basename(current_dir)
                 
@@ -214,8 +219,10 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
                 # 匹配 [Channel] 前缀
                 if dir_name.startswith("[Channel] "):
                     model_name = dir_name[len("[Channel] "):].strip()
+                    logger.debug(f"  PRONHUB - 提取模特名: {model_name} (从 {dir_name})")
                 elif re.match(r'^\[.*?\]\s+', dir_name):
                     model_name = re.sub(r'^\[.*?\]\s+', '', dir_name).strip()
+                    logger.debug(f"  PRONHUB - 提取模特名: {model_name} (从 {dir_name})")
                 else:
                     # 跳过非PRONHUB格式的目录
                     continue
@@ -227,11 +234,21 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
                     config_lower = config_model.lower().replace(' ', '').replace('_', '').replace('-', '')
                     model_lower = model_name.lower().replace(' ', '').replace('_', '').replace('-', '')
                     
+                    logger.debug(f"  PRONHUB - 匹配测试: {model_name} vs {config_model}")
+                    logger.debug(f"  PRONHUB - 标准化: {model_lower} vs {config_lower}")
+                    
                     if (model_lower == config_lower or 
                         model_lower in config_lower or 
                         config_lower in model_lower):
                         matched_model = config_model
+                        logger.debug(f"  PRONHUB - 匹配成功: {model_name} -> {matched_model}")
                         break
+                
+                # 如果没有精确匹配，尝试模糊匹配
+                if not matched_model:
+                    # 直接使用目录提取的模特名
+                    matched_model = model_name
+                    logger.debug(f"  PRONHUB - 模糊匹配: 使用目录名作为模特名: {matched_model}")
                 
                 if matched_model:
                     # 提取国家信息：从路径中提取国家目录

@@ -71,6 +71,9 @@ def load_models(model_path: str = "models.json") -> dict:
                 example = data['examples'][0]
                 if 'models' in example:
                     return example['models']
+            # 检查是否是嵌套格式，如 {"models": {"模特名": "URL"}}
+            elif 'models' in data:
+                return data['models']
             # 如果不是schema格式，直接返回
             return data
     except Exception as e:
@@ -80,7 +83,12 @@ def load_models(model_path: str = "models.json") -> dict:
 # --- 缓存管理 --- 
 def get_cache_dir(config: dict) -> str:
     """获取缓存目录路径"""
-    cache_dir = os.path.join(config['output_dir'], 'cache')
+    # 确保output目录存在
+    output_dir = config['output_dir']
+    Path(output_dir).mkdir(exist_ok=True)
+    
+    # 然后创建缓存目录
+    cache_dir = os.path.join(output_dir, 'cache')
     Path(cache_dir).mkdir(exist_ok=True)
     return cache_dir
 
@@ -127,6 +135,11 @@ def clean_filename(name: str, patterns: List[str]) -> str:
             name = re.sub(pat, '', name, flags=re.IGNORECASE)
         except re.error as e:
             logging.debug(f"正则表达式错误 '{pat}': {e}")
+            # 尝试不带标志的正则表达式
+            try:
+                name = re.sub(pat, '', name)
+            except:
+                pass
     
     cleaned = name.strip()
     

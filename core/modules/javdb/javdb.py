@@ -169,14 +169,14 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
 def clean_javdb_title(title: str, patterns: List[str]) -> str:
     """清理JAVDB视频标题"""
     # 先应用通用清理
-    from core.modules.common.common import clean_filename
+    from ..common.common import clean_filename
     cleaned = clean_filename(title, patterns)
     
     # JAVDB特定的清理
     # 移除JAVDB特有的标记
     cleaned = re.sub(r'\b(javdb|JAVDB)\b', '', cleaned, flags=re.IGNORECASE)
     # 移除JAVDB特有的标签格式
-    cleaned = re.sub(r'\[(?i)javdb\]\s*', '', cleaned)
+    cleaned = re.sub(r'(?i)\[javdb\]\s*', '', cleaned)
     # 移除常见的JAV标记
     cleaned = re.sub(r'\b(JAV|jav)\b', '', cleaned, flags=re.IGNORECASE)
     # 再次清理空格
@@ -190,7 +190,7 @@ def scan_javdb_models(config_models: dict, local_roots: List[str], video_exts: S
     扫描JAVDB格式的本地模特目录（不带前缀）
     返回(模特名, 模特根路径, 原始目录名, 国家)元组列表
     """
-    from core.modules.common.common import clean_filename
+    from ..common.common import clean_filename
     
     matched = []
     
@@ -209,6 +209,11 @@ def scan_javdb_models(config_models: dict, local_roots: List[str], video_exts: S
                 # 检查当前目录是否是JAVDB格式的模特目录（不带前缀）
                 dir_name = os.path.basename(current_dir)
                 
+                # 跳过根目录本身
+                if current_dir == root:
+                    logger.debug(f"  JAVDB - 跳过根目录: {dir_name}")
+                    continue
+                
                 # 提取模特名
                 model_name = None
                 original_dir = dir_name
@@ -216,9 +221,11 @@ def scan_javdb_models(config_models: dict, local_roots: List[str], video_exts: S
                 # JAVDB格式：直接使用目录名作为模特名（不带前缀）
                 if dir_name.startswith("[Channel] ") or re.match(r'^\[.*?\]\s+', dir_name):
                     # 跳过带前缀的目录
+                    logger.debug(f"  JAVDB - 跳过带前缀的目录: {dir_name}")
                     continue
                 else:
                     model_name = dir_name.strip()
+                    logger.debug(f"  JAVDB - 提取模特名: {model_name} (从 {dir_name})")
                 
                 # 在配置中查找匹配的模特名
                 matched_model = None
@@ -227,11 +234,21 @@ def scan_javdb_models(config_models: dict, local_roots: List[str], video_exts: S
                     config_lower = config_model.lower().replace(' ', '').replace('_', '').replace('-', '')
                     model_lower = model_name.lower().replace(' ', '').replace('_', '').replace('-', '')
                     
+                    logger.debug(f"  JAVDB - 匹配测试: {model_name} vs {config_model}")
+                    logger.debug(f"  JAVDB - 标准化: {model_lower} vs {config_lower}")
+                    
                     if (model_lower == config_lower or 
                         model_lower in config_lower or 
                         config_lower in model_lower):
                         matched_model = config_model
+                        logger.debug(f"  JAVDB - 匹配成功: {model_name} -> {matched_model}")
                         break
+                
+                # 如果没有精确匹配，尝试模糊匹配
+                if not matched_model:
+                    # 直接使用目录提取的模特名
+                    matched_model = model_name
+                    logger.debug(f"  JAVDB - 模糊匹配: 使用目录名作为模特名: {matched_model}")
                 
                 if matched_model:
                     # 提取国家信息：从路径中提取国家目录

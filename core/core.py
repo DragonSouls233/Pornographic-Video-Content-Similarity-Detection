@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Set, List, Tuple, Dict, Optional
 
 # 导入模块化的功能
-from core.modules.common.common import (
+from modules.common.common import (
     setup_logging,
     load_config,
     load_models,
@@ -22,12 +22,12 @@ from core.modules.common.common import (
     record_missing_videos
 )
 
-from core.modules.pronhub.pronhub import (
+from modules.pronhub.pronhub import (
     fetch_with_requests_pronhub,
     scan_pronhub_models
 )
 
-from core.modules.javdb.javdb import (
+from modules.javdb.javdb import (
     fetch_with_requests_javdb,
     scan_javdb_models
 )
