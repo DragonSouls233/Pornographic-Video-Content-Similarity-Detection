@@ -204,18 +204,18 @@ class ModelManagerGUI:
         # 本地目录选择 - 分类管理
         ttk.Label(config_frame, text="本地目录配置:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(10, 5))
         
-        # PRON目录配置
-        pron_frame = ttk.LabelFrame(config_frame, text="PRON目录", padding="10")
-        pron_frame.pack(fill=tk.X, pady=5)
+        # PORN目录配置
+        porn_frame = ttk.LabelFrame(config_frame, text="PORN目录", padding="10")
+        porn_frame.pack(fill=tk.X, pady=5)
         
-        pron_entry_frame = ttk.Frame(pron_frame)
-        pron_entry_frame.pack(fill=tk.X)
+        porn_entry_frame = ttk.Frame(porn_frame)
+        porn_entry_frame.pack(fill=tk.X)
         
-        ttk.Label(pron_entry_frame, text="模特目录:").pack(side=tk.LEFT)
-        self.pron_dir_var = tk.StringVar()
-        self.pron_dir_entry = ttk.Entry(pron_entry_frame, textvariable=self.pron_dir_var, width=50)
-        self.pron_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
-        ttk.Button(pron_entry_frame, text="浏览", command=self.browse_pron_dir, width=10).pack(side=tk.RIGHT)
+        ttk.Label(porn_entry_frame, text="模特目录:").pack(side=tk.LEFT)
+        self.porn_dir_var = tk.StringVar()
+        self.porn_dir_entry = ttk.Entry(porn_entry_frame, textvariable=self.porn_dir_var, width=50)
+        self.porn_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        ttk.Button(porn_entry_frame, text="浏览", command=self.browse_porn_dir, width=10).pack(side=tk.RIGHT)
         
         # JAV目录配置
         jav_frame = ttk.LabelFrame(config_frame, text="JAV目录", padding="10")
@@ -1717,11 +1717,11 @@ class ModelManagerGUI:
         
         messagebox.showinfo("使用说明", help_text)
     
-    def browse_pron_dir(self):
-        """浏览PRON目录"""
-        directory = filedialog.askdirectory(title="选择PRON模特目录")
+    def browse_porn_dir(self):
+        """浏览PORN目录"""
+        directory = filedialog.askdirectory(title="选择PORN模特目录")
         if directory:
-            self.pron_dir_var.set(directory)
+            self.porn_dir_var.set(directory)
             self.save_local_dirs()
     
     def browse_jav_dir(self):
@@ -1735,7 +1735,7 @@ class ModelManagerGUI:
         """保存本地目录配置"""
         try:
             dirs_config = {
-                "pron": self.pron_dir_var.get().strip() if self.pron_dir_var.get() else "",
+                "porn": self.porn_dir_var.get().strip() if self.porn_dir_var.get() else "",
                 "jav": self.jav_dir_var.get().strip() if self.jav_dir_var.get() else ""
             }
             with open("local_dirs.json", "w", encoding="utf-8") as f:
@@ -1752,18 +1752,18 @@ class ModelManagerGUI:
                     # 兼容旧版本格式
                     if isinstance(dirs_config, list):
                         # 旧版本，尝试转换为分类格式
-                        pron_dirs = [d for d in dirs_config if "pron" in d.lower() or "western" in d.lower()]
+                        porn_dirs = [d for d in dirs_config if "porn" in d.lower() or "western" in d.lower()]
                         jav_dirs = [d for d in dirs_config if "jav" in d.lower() or "japanese" in d.lower()]
                         
-                        self.pron_dir_var.set(pron_dirs[0] if pron_dirs else "")
+                        self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
                         self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
                     else:
                         # 新版本格式
-                        self.pron_dir_var.set(dirs_config.get("pron", ""))
+                        self.porn_dir_var.set(dirs_config.get("porn", ""))
                         self.jav_dir_var.set(dirs_config.get("jav", ""))
         except Exception as e:
             # 设置默认值
-            self.pron_dir_var.set("F:/作品/Porn")
+            self.porn_dir_var.set("F:/作品/Porn")
             self.jav_dir_var.set("F:/作品/JAV")
     
     def show_about(self):
@@ -1878,11 +1878,45 @@ class ModelManagerGUI:
                     # 设置日志
                     logger = logging.getLogger(__name__)
                     
-                    # 创建下载器
-                    downloader = PornDownloader(config)
-                    
                     total_count = len(download_items)
                     downloaded_count = 0
+
+                    # 创建进度钩子函数
+                    def progress_hook(d):
+                        if not self.is_downloading or self.download_cancelled:
+                            return
+                            
+                        if d['status'] == 'downloading':
+                            # 计算下载速度
+                            speed_bytes = d.get('speed', 0)
+                            if speed_bytes:
+                                speed_str = self._format_bytes(speed_bytes) + "/s"
+                                self.download_speed_var.set(speed_str)
+                            else:
+                                self.download_speed_var.set("0 KB/s")
+                            
+                            # 计算进度百分比
+                            total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                            downloaded_bytes = d.get('downloaded_bytes', 0)
+                            
+                            if total_bytes > 0:
+                                percentage = (downloaded_bytes / total_bytes) * 100
+                                # 计算整体进度（包括已完成的文件）
+                                overall_percentage = ((downloaded_count + (percentage / 100.0)) / total_count) * 100
+                                self.download_progress_var.set(overall_percentage)
+                                self.download_percentage_var.set(f"{overall_percentage:.1f}%")
+                                
+                                # 更新总大小显示
+                                total_size_mb = self._format_bytes(total_bytes)
+                                downloaded_mb = self._format_bytes(downloaded_bytes)
+                                self.total_size_var.set(f"{downloaded_mb}/{total_size_mb}")
+                                
+                        elif d['status'] == 'finished':
+                            downloaded_mb = self._format_bytes(d.get('total_bytes', 0))
+                            self.add_download_log(f"文件下载完成: {d.get('filename', 'unknown')} ({downloaded_mb})")
+
+                    # 创建下载器
+                    downloader = PornDownloader(config, progress_callback=progress_hook)
                     
                     for i, (model, title, url) in enumerate(download_items, 1):
                         if self.download_cancelled:
@@ -1902,44 +1936,6 @@ class ModelManagerGUI:
                                     if hasattr(result_value, 'local_folder_full') and result_value.local_folder_full:
                                         save_dir = result_value.local_folder_full
                                     break
-                            
-                            # 创建进度钩子函数
-                            def progress_hook(d):
-                                if not self.is_downloading or self.download_cancelled:
-                                    return
-                                    
-                                if d['status'] == 'downloading':
-                                    # 计算下载速度
-                                    speed_bytes = d.get('speed', 0)
-                                    if speed_bytes:
-                                        speed_str = self._format_bytes(speed_bytes) + "/s"
-                                        self.download_speed_var.set(speed_str)
-                                    else:
-                                        self.download_speed_var.set("0 KB/s")
-                                    
-                                    # 计算进度百分比
-                                    total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                                    downloaded_bytes = d.get('downloaded_bytes', 0)
-                                    
-                                    if total_bytes > 0:
-                                        percentage = (downloaded_bytes / total_bytes) * 100
-                                        # 计算整体进度（包括已完成的文件）
-                                        overall_percentage = ((downloaded_count + (percentage / 100.0)) / total_count) * 100
-                                        self.download_progress_var.set(overall_percentage)
-                                        self.download_percentage_var.set(f"{overall_percentage:.1f}%")
-                                        
-                                        # 更新总大小显示
-                                        total_size_mb = self._format_bytes(total_bytes)
-                                        downloaded_mb = self._format_bytes(downloaded_bytes)
-                                        self.total_size_var.set(f"{downloaded_mb}/{total_size_mb}")
-                                        
-                                elif d['status'] == 'finished':
-                                    downloaded_mb = self._format_bytes(d.get('total_bytes', 0))
-                                    self.add_download_log(f"文件下载完成: {d.get('filename', 'unknown')} ({downloaded_mb})")
-                                    
-                            # 配置下载器进度钩子
-                            if hasattr(downloader, 'ydl_opts'):
-                                downloader.ydl_opts['progress_hooks'] = [progress_hook]
                             
                             # 执行下载
                             result = downloader.download_single_video(url, save_dir)
@@ -2090,32 +2086,29 @@ class ModelManagerGUI:
             messagebox.showerror("错误", f"打开模特选择对话框失败: {e}")
     
     def _download_complete_directories(self, models_info, max_videos_per_model=0):
-        """执行完整目录下载"""
+        """执行完整目录下载（内置GUI显示，不弹窗）"""
         try:
             # 导入批量下载函数
             from core.modules.porn.downloader import batch_download_models
             import threading
-            import queue
             
-            # 创建下载进度对话框
-            progress_window = tk.Toplevel(self.root)
-            progress_window.title("完整目录下载进度")
-            progress_window.geometry("700x500")
-            progress_window.transient(self.root)
-            progress_window.grab_set()
+            # 初始化下载状态
+            self.is_downloading = True
+            self.download_cancelled = False
             
-            # 进度显示
-            ttk.Label(progress_window, text="完整目录下载进度:", font=("Arial", 12, "bold")).pack(pady=10)
+            # 重置下载统计
+            self.downloaded_count_var.set("0")
+            # 估计总数
+            estimated_total = len(models_info) * (max_videos_per_model if max_videos_per_model > 0 else 20)
+            self.total_count_var.set(f"~{estimated_total}")
+            self.download_progress_var.set(0)
+            self.download_percentage_var.set("0%")
+            self.download_speed_var.set("0 KB/s")
+            self.current_file_var.set("准备完整下载...")
             
-            progress_text = tk.Text(progress_window, height=20, width=80)
-            progress_scrollbar = ttk.Scrollbar(progress_window, orient=tk.VERTICAL, command=progress_text.yview)
-            progress_text.configure(yscrollcommand=progress_scrollbar.set)
-            
-            progress_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-            progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
-            
-            # 进度队列
-            progress_queue = queue.Queue()
+            # 清空下载日志
+            self.download_log_text.delete('1.0', tk.END)
+            self.add_download_log(f"开始完整目录下载任务，共 {len(models_info)} 个模特")
             
             def download_worker():
                 """下载工作线程"""
@@ -2123,79 +2116,84 @@ class ModelManagerGUI:
                     # 获取配置
                     config = self.load_config()
                     
-                    def progress_callback(msg):
-                        progress_queue.put(msg)
+                    # 进度统计
+                    stats = {
+                        'downloaded': 0,
+                        'total_size': 0
+                    }
+
+                    def log_callback(msg):
+                        self.add_download_log(msg)
+                        if "下载进度:" in msg or "处理模特" in msg:
+                            self.current_file_var.set(msg.strip())
                     
+                    def progress_hook(d):
+                        if not self.is_downloading or self.download_cancelled:
+                            return
+                            
+                        if d['status'] == 'downloading':
+                            # 计算下载速度
+                            speed_bytes = d.get('speed', 0)
+                            if speed_bytes:
+                                speed_str = self._format_bytes(speed_bytes) + "/s"
+                                self.download_speed_var.set(speed_str)
+                            
+                            # 计算当前文件进度
+                            total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                            downloaded_bytes = d.get('downloaded_bytes', 0)
+                            
+                            if total_bytes > 0:
+                                percentage = (downloaded_bytes / total_bytes) * 100
+                                self.download_percentage_var.set(f"{percentage:.1f}%")
+                                self.download_progress_var.set(percentage) # 这里显示单个文件的进度，因为总数不确定
+                                
+                                # 更新大小显示
+                                total_size_mb = self._format_bytes(total_bytes)
+                                downloaded_mb = self._format_bytes(downloaded_bytes)
+                                self.total_size_var.set(f"{downloaded_mb}/{total_size_mb}")
+                                
+                        elif d['status'] == 'finished':
+                            stats['downloaded'] += 1
+                            self.downloaded_count_var.set(str(stats['downloaded']))
+                            downloaded_mb = self._format_bytes(d.get('total_bytes', 0))
+                            self.add_download_log(f"文件下载完成: {d.get('filename', 'unknown')} ({downloaded_mb})")
+
                     # 执行批量下载
                     result = batch_download_models(
                         models_info=models_info,
-                        base_save_dir=None,  # 使用默认输出目录
+                        base_save_dir=None,
                         config=config,
                         max_videos_per_model=max_videos_per_model if max_videos_per_model > 0 else None,
-                        progress_callback=progress_callback
+                        log_callback=log_callback,
+                        progress_callback=progress_hook
                     )
                     
-                    progress_queue.put("=" * 60)
-                    progress_queue.put("批量下载完成！")
-                    progress_queue.put(f"总模特数: {result['total_models']}")
-                    progress_queue.put(f"成功模特数: {result['successful_models']}")
-                    progress_queue.put(f"失败模特数: {result['failed_models']}")
-                    progress_queue.put(f"总视频数: {result['total_videos']}")
-                    progress_queue.put(f"已下载数: {result['total_downloaded']}")
-                    progress_queue.put(f"总大小: {result['total_size'] / (1024*1024*1024):.2f} GB")
-                    progress_queue.put("=" * 60)
-                    
-                    # 显示详细结果
-                    for model_result in result.get('model_results', []):
-                        model_name = model_result.get('model_name', 'Unknown')
-                        if model_result.get('success'):
-                            progress_queue.put(f"\n✅ {model_name}:")
-                            progress_queue.put(f"  成功: {model_result.get('successful_downloads', 0)}")
-                            progress_queue.put(f"  失败: {model_result.get('failed_downloads', 0)}")
-                            progress_queue.put(f"  跳过: {model_result.get('skipped_downloads', 0)}")
-                        else:
-                            progress_queue.put(f"\n❌ {model_name}: {model_result.get('message', 'Unknown error')}")
-                    
-                    progress_queue.put("DOWNLOAD_COMPLETE")
+                    self.add_download_log("=" * 60)
+                    self.add_download_log("🎉 批量下载完成！")
+                    self.add_download_log(f"总模特数: {result['total_models']}")
+                    self.add_download_log(f"成功模特数: {result['successful_models']}")
+                    self.add_download_log(f"失败模特数: {result['failed_models']}")
+                    self.add_download_log(f"总下载视频数: {result['total_downloaded']}")
+                    self.add_download_log(f"总大小: {self._format_bytes(result['total_size'])}")
+                    self.add_download_log("=" * 60)
                     
                 except Exception as e:
-                    progress_queue.put(f"批量下载器错误: {str(e)}")
-                    progress_queue.put("DOWNLOAD_COMPLETE")
-            
-            def update_progress():
-                """更新进度显示"""
-                try:
-                    while True:
-                        try:
-                            message = progress_queue.get_nowait()
-                            if message == "DOWNLOAD_COMPLETE":
-                                ttk.Button(progress_window, text="关闭", command=progress_window.destroy).pack(pady=10)
-                                break
-                            else:
-                                progress_text.insert(tk.END, message + "\n")
-                                progress_text.see(tk.END)
-                                progress_window.update()
-                        except queue.Empty:
-                            break
-                    
-                    # 继续检查进度
-                    if progress_window.winfo_exists():
-                        progress_window.after(100, update_progress)
-                except:
-                    pass
+                    self.add_download_log(f"❌ 批量下载器错误: {str(e)}")
+                finally:
+                    self.is_downloading = False
+                    self.current_file_var.set("下载完成")
+                    self.download_speed_var.set("0 KB/s")
+                    self.download_progress_var.set(100)
+                    self.download_percentage_var.set("100%")
             
             # 启动下载线程
-            download_thread = threading.Thread(target=download_worker, daemon=True)
-            download_thread.start()
+            threading.Thread(target=download_worker, daemon=True).start()
             
-            # 启动进度更新
-            update_progress()
-            
-            # 显示窗口
-            progress_window.mainloop()
+            # 切换到运行控制标签页以便看到进度
+            self.notebook.select(self.run_tab)
             
         except ImportError as e:
-            messagebox.showerror("错误", f"下载模块导入失败: {e}\n请确保已安装 yt-dlp: pip install yt-dlp")
+            messagebox.showerror("错误", f"下载模块导入失败: {e}")
         except Exception as e:
             messagebox.showerror("错误", f"完整目录下载失败: {e}")
     

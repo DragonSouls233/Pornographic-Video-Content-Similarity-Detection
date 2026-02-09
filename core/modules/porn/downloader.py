@@ -26,15 +26,17 @@ logger = logging.getLogger(__name__)
 class PornDownloader:
     """Porn视频下载器"""
     
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None, progress_callback: Optional[callable] = None):
         """
         初始化下载器
         
         Args:
             config: 配置字典，如果为None则从全局配置读取
+            progress_callback: 进度回调函数，接收一个包含进度信息的字典
         """
         self.config = config or get_config()
         self.session = get_session()
+        self.progress_callback = progress_callback
         
         # 配置代理
         if self.config.get('network', {}).get('proxy', {}).get('enabled', False):
@@ -84,6 +86,13 @@ class PornDownloader:
             logger.info(f"下载完成: {d['filename']}")
         elif d['status'] == 'error':
             logger.error(f"下载错误: {d.get('error', 'Unknown error')}")
+            
+        # 如果有外部回调，则调用
+        if self.progress_callback:
+            try:
+                self.progress_callback(d)
+            except Exception as e:
+                logger.error(f"执行进度回调失败: {e}")
     
     def _clean_title(self, title: str) -> str:
         """清理视频标题"""
@@ -400,6 +409,7 @@ def download_model_complete_directory(model_url: str, model_name: str,
                                  base_save_dir: Optional[str] = None, 
                                  config: Optional[Dict] = None,
                                  max_videos: Optional[int] = None,
+                                 log_callback: Optional[callable] = None,
                                  progress_callback: Optional[callable] = None) -> Dict:
     """
     完整下载模特目录的所有视频
@@ -410,7 +420,8 @@ def download_model_complete_directory(model_url: str, model_name: str,
         base_save_dir: 基础保存目录（可选）
         config: 配置字典（可选）
         max_videos: 最大下载数量限制（可选）
-        progress_callback: 进度回调函数（可选）
+        log_callback: 日志回调函数（可选），接收字符串消息
+        progress_callback: 进度回调函数（可选），接收yt-dlp进度字典
         
     Returns:
         下载结果字典，包含统计信息
@@ -418,7 +429,7 @@ def download_model_complete_directory(model_url: str, model_name: str,
     logger.info(f"开始完整下载模特目录: {model_name}")
     logger.info(f"模特URL: {model_url}")
     
-    downloader = PornDownloader(config)
+    downloader = PornDownloader(config, progress_callback=progress_callback)
     
     # 确定保存目录
     if base_save_dir:
@@ -448,8 +459,8 @@ def download_model_complete_directory(model_url: str, model_name: str,
         from datetime import datetime
         result['start_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        if progress_callback:
-            progress_callback(f"开始获取 {model_name} 的视频列表...")
+        if log_callback:
+            log_callback(f"开始获取 {model_name} 的视频列表...")
         
         # 获取模特的所有视频URL
         video_urls = _get_model_all_videos(model_url, config)
@@ -462,19 +473,19 @@ def download_model_complete_directory(model_url: str, model_name: str,
         # 应用数量限制
         if max_videos and len(video_urls) > max_videos:
             video_urls = video_urls[:max_videos]
-            if progress_callback:
-                progress_callback(f"限制下载数量为: {max_videos}")
+            if log_callback:
+                log_callback(f"限制下载数量为: {max_videos}")
         
         result['total_videos'] = len(video_urls)
         
-        if progress_callback:
-            progress_callback(f"找到 {len(video_urls)} 个视频，开始下载...")
+        if log_callback:
+            log_callback(f"找到 {len(video_urls)} 个视频，开始下载...")
         
         # 批量下载
         for i, (title, url) in enumerate(video_urls, 1):
             try:
-                if progress_callback:
-                    progress_callback(f"下载进度: {i}/{len(video_urls)} - {title[:50]}...")
+                if log_callback:
+                    log_callback(f"下载进度: {i}/{len(video_urls)} - {title[:50]}...")
                 
                 # 检查文件是否已存在
                 safe_title = downloader._clean_title(title)
@@ -482,8 +493,8 @@ def download_model_complete_directory(model_url: str, model_name: str,
                 
                 if potential_files:
                     result['skipped_downloads'] += 1
-                    if progress_callback:
-                        progress_callback(f"跳过已存在: {title[:50]}...")
+                    if log_callback:
+                        log_callback(f"跳过已存在: {title[:50]}...")
                     result['download_details'].append({
                         'title': title,
                         'url': url,
@@ -498,8 +509,8 @@ def download_model_complete_directory(model_url: str, model_name: str,
                 if download_result['success']:
                     result['successful_downloads'] += 1
                     result['total_size'] += download_result.get('file_size', 0)
-                    if progress_callback:
-                        progress_callback(f"✅ 下载成功: {title[:50]}...")
+                    if log_callback:
+                        log_callback(f"✅ 下载成功: {title[:50]}...")
                     result['download_details'].append({
                         'title': title,
                         'url': url,
@@ -511,8 +522,8 @@ def download_model_complete_directory(model_url: str, model_name: str,
                     result['failed_downloads'] += 1
                     error_msg = download_result.get('message', download_result.get('error', 'Unknown error'))
                     result['errors'].append(f"{title}: {error_msg}")
-                    if progress_callback:
-                        progress_callback(f"❌ 下载失败: {title[:50]}... - {error_msg}")
+                    if log_callback:
+                        log_callback(f"❌ 下载失败: {title[:50]}... - {error_msg}")
                     result['download_details'].append({
                         'title': title,
                         'url': url,
@@ -524,8 +535,8 @@ def download_model_complete_directory(model_url: str, model_name: str,
                 result['failed_downloads'] += 1
                 error_msg = str(e)
                 result['errors'].append(f"处理视频时异常: {error_msg}")
-                if progress_callback:
-                    progress_callback(f"❌ 处理异常: {error_msg}")
+                if log_callback:
+                    log_callback(f"❌ 处理异常: {error_msg}")
         
         result['end_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
@@ -581,6 +592,7 @@ def batch_download_models(models_info: List[Tuple[str, str, str]],
                        base_save_dir: Optional[str] = None,
                        config: Optional[Dict] = None,
                        max_videos_per_model: Optional[int] = None,
+                       log_callback: Optional[callable] = None,
                        progress_callback: Optional[callable] = None) -> Dict:
     """
     批量下载多个模特的完整目录
@@ -590,7 +602,8 @@ def batch_download_models(models_info: List[Tuple[str, str, str]],
         base_save_dir: 基础保存目录（可选）
         config: 配置字典（可选）
         max_videos_per_model: 每个模特的最大下载数量（可选）
-        progress_callback: 进度回调函数（可选）
+        log_callback: 日志回调函数（可选），接收字符串消息
+        progress_callback: 进度回调函数（可选），接收yt-dlp进度字典
         
     Returns:
         批量下载结果
@@ -616,8 +629,8 @@ def batch_download_models(models_info: List[Tuple[str, str, str]],
         
         for i, (model_name, model_url, custom_save_dir) in enumerate(models_info, 1):
             try:
-                if progress_callback:
-                    progress_callback(f"处理模特 {i}/{len(models_info)}: {model_name}")
+                if log_callback:
+                    log_callback(f"处理模特 {i}/{len(models_info)}: {model_name}")
                 
                 # 确定保存目录
                 save_dir = custom_save_dir or base_save_dir
@@ -629,7 +642,8 @@ def batch_download_models(models_info: List[Tuple[str, str, str]],
                     base_save_dir=save_dir,
                     config=config,
                     max_videos=max_videos_per_model,
-                    progress_callback=lambda msg: progress_callback(f"  {msg}") if progress_callback else None
+                    log_callback=lambda msg: log_callback(f"  {msg}") if log_callback else None,
+                    progress_callback=progress_callback
                 )
                 
                 results['model_results'].append(model_result)
