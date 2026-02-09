@@ -2,15 +2,13 @@ cache:
   cache_dir: cache
   cleanup_strategy: none
   compress: false
+  database_path: output/cache.db
   enabled: true
   expiration_days: 3650
+  incremental_update: true
   max_size_mb: -1
-  # 智能缓存配置（新增）
-  incremental_update: true      # 启用增量更新
-  page_expiry_hours: 24         # 页面缓存过期时间（小时）
-  # 数据库存储配置（可选）
-  use_database: false           # 是否使用数据库存储替代JSON文件
-  database_path: output/cache.db  # 数据库文件路径
+  page_expiry_hours: 24
+  use_database: false
 comparison:
   case_sensitive: false
   ignore_list:
@@ -23,6 +21,21 @@ comparison:
 delay_between_pages:
   max: 3.5
   min: 2.0
+download:
+  default_version: auto
+  enable_fallback: true
+  max_workers: 4
+  output_dir: downloads
+  retry_count: 3
+  retry_delay: 5
+  timeout: 300
+  v1:
+    cookies_file: ''
+    enable_cookies: false
+    preferred_quality: best
+  v3:
+    headless: true
+    page_load_timeout: 30
 error_handling:
   alert_threshold: 10
   collect_statistics: true
@@ -60,18 +73,53 @@ filename_cleaning:
     lowercase: false
     normalize_spaces: true
     trim: true
-# 本地目录配置（分类管理）
 local_roots:
-  # Western adult content directories
-  porn:
-    - "F:/作品"
-  # Japanese adult video directories  
-  jav:
-    - "F:/作品"
-  # General content directories
   general:
-    - "F:/作品"
+  - F:/作品
+  jav:
+  - F:/作品
+  porn:
+  - F:/作品
 local_scan:
+  category_scan:
+    general:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      ignore_files:
+      - Thumbs.db
+      max_depth: 2
+      model_dir_pattern: ^\[.*?\]\s*
+    jav:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      - private
+      - system
+      ignore_files:
+      - Thumbs.db
+      - desktop.ini
+      max_depth: 4
+      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
+      model_patterns:
+      - ^([A-Za-z]{3,20})$
+      - ^([A-Za-z0-9_-]+)$
+      - ^([\u3040-\u309F\u30A0-\u30FF]+)$
+    porn:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      - private
+      - system
+      ignore_files:
+      - Thumbs.db
+      - desktop.ini
+      max_depth: 3
+      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
+      model_patterns:
+      - ^([A-Z][a-z]+[A-Z][a-z]+)$
+      - ^([A-Za-z]{3,20})$
+      - ^([A-Za-z0-9_-]+)$
   follow_symlinks: false
   ignore_dirs:
   - System Volume Information
@@ -84,54 +132,6 @@ local_scan:
   model_dir_pattern: ^\[.*?\]\s*
   scan_timeout: -1
   thread_count: 3
-  
-  # 分类扫描配置
-  category_scan:
-    # Porn 内容特定设置
-    porn:
-      ignore_dirs:
-      - System Volume Information
-      - $RECYCLE.BIN
-      - "private"
-      - "system"
-      ignore_files:
-      - Thumbs.db
-      - "desktop.ini"
-      max_depth: 3
-      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
-      # 特征文件名模式（识别模特目录）
-      model_patterns:
-      - "^([A-Z][a-z]+[A-Z][a-z]+)$"  # 驼峰命名
-      - "^([A-Za-z]{3,20})$"           # 简单字母名
-      - "^([A-Za-z0-9_-]+)$"           # 包含数字和下划线
-    
-    # JAV 内容特定设置
-    jav:
-      ignore_dirs:
-      - System Volume Information
-      - $RECYCLE.BIN
-      - "private"
-      - "system"
-      ignore_files:
-      - Thumbs.db
-      - "desktop.ini"
-      max_depth: 4
-      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
-      # JAV 特有的模特目录模式
-      model_patterns:
-      - "^([A-Za-z]{3,20})$"           # 英文/罗马音
-      - "^([A-Za-z0-9_-]+)$"           # 包含数字
-      - "^([\\u3040-\\u309F\\u30A0-\\u30FF]+)$"  # 日文平假名/片假名
-    
-    # 通用内容设置
-    general:
-      ignore_dirs:
-      - System Volume Information
-      - $RECYCLE.BIN
-      ignore_files:
-      - Thumbs.db
-      max_depth: 2
-      model_dir_pattern: ^\[.*?\]\s*
 log_dir: logs
 logging:
   backup_count: 5
@@ -144,13 +144,10 @@ logging:
   max_bytes: 10485760
   missing_video_detail: true
 max_pages: -1
-
-# 多线程配置（新增）
 multithreading:
-  enabled: true                 # 启用多线程
-  max_workers: 3                # 并发工作线程数（建议 3-5）
-  thread_name_prefix: "Worker"  # 线程名前缀
-
+  enabled: true
+  max_workers: 3
+  thread_name_prefix: Worker
 network:
   backoff_factor: 0.5
   headers:
@@ -173,6 +170,24 @@ network:
   user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
   verify_ssl: true
 output:
+  category_output:
+    general:
+      directory_structure: general/category
+      filename_pattern: general_{timestamp}_{type}
+      formats:
+      - txt
+    jav:
+      directory_structure: jav/studio/model
+      filename_pattern: jav_{timestamp}_{type}
+      formats:
+      - txt
+      - json
+    porn:
+      directory_structure: porn/country/model
+      filename_pattern: porn_{timestamp}_{type}
+      formats:
+      - txt
+      - json
   compress: false
   directory_structure: country/model
   encoding: utf-8
@@ -181,38 +196,25 @@ output:
   - txt
   - json
   max_file_size: -1
-  overwrite_existing: true
-  retention_days: -1
-  
-  # 分类输出配置
-  category_output:
-    # Porn 内容输出设置
-    porn:
-      directory_structure: "porn/country/model"
-      filename_pattern: 'porn_{timestamp}_{type}'
-      formats: ["txt", "json"]
-      
-    # JAV 内容输出设置
-    jav:
-      directory_structure: "jav/studio/model"
-      filename_pattern: 'jav_{timestamp}_{type}'
-      formats: ["txt", "json"]
-      
-    # 通用内容输出设置
-    general:
-      directory_structure: "general/category"
-      filename_pattern: 'general_{timestamp}_{type}'
-      formats: ["txt"]
-      
-  # 合并报告设置
   merge_reports:
     enabled: true
-    output_file: "merged_similarity_report"
     include_categories:
     - porn
     - jav
     - general
+    output_file: merged_similarity_report
+  overwrite_existing: true
+  retention_days: -1
 output_dir: output
+porn:
+  cookies_file: ''
+  download_options:
+    download_thumbnail: true
+    max_resolution: 0
+    max_retries: 3
+    preferred_format: mp4
+    timeout: 300
+  missing_log_template: simple
 proxy:
   bypass_dpi: false
   download_limit: false
@@ -245,61 +247,3 @@ video_extensions:
 - .mov
 - .wmv
 - .flv
-
-# Porn下载配置
-porn:
-  # Cookie文件路径（用于访问会员内容）
-  cookies_file: ""
-  # 下载选项
-  download_options:
-    # 最大分辨率（像素高度），0表示不限制
-    max_resolution: 0
-    # 优先格式
-    preferred_format: "mp4"
-    # 是否下载缩略图
-    download_thumbnail: true
-    # 重试次数
-    max_retries: 3
-    # 超时时间（秒）
-    timeout: 300
-  # 缺失日志模板类型 ("simple" | "detailed")
-  missing_log_template: "simple"
-
-# 下载器配置（V1/V3统一调度）
-download:
-  # 默认版本策略：v1（yt-dlp稳定版）/ v3（Selenium+CDP版）/ auto（自动选择）
-  default_version: "auto"
-  
-  # 是否启用自动降级（V1失败时自动切换到V3）
-  enable_fallback: true
-  
-  # 下载超时时间（秒）
-  timeout: 300
-  
-  # 重试次数
-  retry_count: 3
-  
-  # 每个视频重试间隔（秒）
-  retry_delay: 5
-  
-  # 并发下载线程数
-  max_workers: 4
-  
-  # 默认输出目录
-  output_dir: "downloads"
-  
-  # V1特定配置
-  v1:
-    # 是否启用会员cookies支持
-    enable_cookies: false
-    # cookies文件路径
-    cookies_file: ""
-    # 优先分辨率
-    preferred_quality: "best"
-  
-  # V3特定配置  
-  v3:
-    # 是否启用Selenium无头模式
-    headless: true
-    # 页面加载超时（秒）
-    page_load_timeout: 30

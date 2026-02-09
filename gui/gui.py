@@ -2069,13 +2069,25 @@ class ModelManagerGUI:
                         self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
                         self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
                     else:
-                        # 新版本格式
-                        self.porn_dir_var.set(dirs_config.get("porn", ""))
-                        self.jav_dir_var.set(dirs_config.get("jav", ""))
+                        # 新版本格式 - 使用第一个目录作为显示
+                        porn_dirs = dirs_config.get("porn", [])
+                        jav_dirs = dirs_config.get("jav", [])
+                        
+                        self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
+                        self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
+            else:
+                # 如果local_dirs.json不存在，从config.yaml加载
+                config = self.load_config()
+                local_roots = config.get('local_roots', {})
+                porn_dirs = local_roots.get('porn', [])
+                jav_dirs = local_roots.get('jav', [])
+                
+                self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
+                self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
         except Exception as e:
             # 设置默认值
-            self.porn_dir_var.set("F:/作品/Porn")
-            self.jav_dir_var.set("F:/作品/JAV")
+            self.porn_dir_var.set("F:/作品")
+            self.jav_dir_var.set("F:/作品")
     
     def show_about(self):
         """显示关于信息"""

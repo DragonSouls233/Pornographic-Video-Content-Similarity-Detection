@@ -1,3 +1,6 @@
 {
-  "JULIA": "https://javdb.com/actors/1KBW"
+  "JULIA": {
+    "module": "JAVDB",
+    "url": "https://javdb.com/actors/1KBW"
+  }
 }
