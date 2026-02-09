@@ -8,8 +8,9 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 # --- JAVDB特定功能 ---
-def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dict = None) -> Tuple[Set[str], Dict[str, str]]:
-    """JAVDB专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页"""
+def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dict = None,
+                              smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
+    """JAVDB专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页（支持增量更新）"""
     if config is None:
         config = {}
     
@@ -19,17 +20,18 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
     
     if use_selenium or scraper == 'selenium':
         try:
-            return fetch_with_selenium_javdb(url, logger, max_pages, config)
+            return fetch_with_selenium_javdb(url, logger, max_pages, config, smart_cache, model_name)
         except Exception as e:
             logger.warning(f"  JAVDB - Selenium 抓取失败，回退到 requests: {e}")
             # 回退到 requests
-            return fetch_with_requests_only_javdb(url, logger, max_pages, config)
+            return fetch_with_requests_only_javdb(url, logger, max_pages, config, smart_cache, model_name)
     else:
-        return fetch_with_requests_only_javdb(url, logger, max_pages, config)
+        return fetch_with_requests_only_javdb(url, logger, max_pages, config, smart_cache, model_name)
 
 
-def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dict = None) -> Tuple[Set[str], Dict[str, str]]:
-    """使用 Selenium 抓取 JAVDB 视频"""
+def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dict = None,
+                              smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
+    """使用 Selenium 抓取 JAVDB 视频（支持增量更新）"""
     try:
         from ..common.selenium_helper import SeleniumHelper
     except ImportError:
@@ -38,7 +40,19 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
     
     all_titles = set()
     title_to_url = {}
-    page_num = 1
+    
+    # 确定抓取范围（支持增量更新）
+    start_page = 1
+    if smart_cache and model_name:
+        start_page, max_pages = smart_cache.get_incremental_fetch_range(model_name, max_pages)
+        if start_page > 1:
+            # 加载已缓存的标题
+            cached_titles = smart_cache.get_cached_titles(model_name)
+            all_titles.update(cached_titles)
+            logger.info(f"  JAVDB - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
+    
+    page_num = start_page
+    consecutive_empty_pages = 0
     
     selenium = None
     try:
@@ -49,6 +63,13 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
         logger.info("  JAVDB - 使用 Selenium 模式抓取")
         
         while True:
+            # 检查该页是否需要更新（智能缓存）
+            if smart_cache and model_name and page_num < start_page + 3:  # 只检查前3页
+                if not smart_cache.should_update_page(model_name, page_num):
+                    logger.debug(f"  JAVDB - 第 {page_num} 页在缓存有效期内，跳过")
+                    page_num += 1
+                    continue
+            
             # 构建分页URL
             page_url = url
             if page_num > 1:
@@ -73,6 +94,7 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
             
             # 提取标题
             page_titles = set()
+            page_videos = []  # 用于智能缓存
             
             # 选择器1: JAVDB特有的视频标题选择器
             for elem in soup.select('a.video-title, .movie-title a, .film-title a'):
@@ -85,6 +107,7 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
                         if not video_url.startswith('http'):
                             video_url = urljoin(url, video_url)
                         title_to_url[cleaned_title] = video_url
+                        page_videos.append((cleaned_title, video_url))
             
             # 选择器2: 通用标题选择器
             if not page_titles:
@@ -100,6 +123,7 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
                                 if not video_url.startswith('http'):
                                     video_url = urljoin(url, video_url)
                                 title_to_url[cleaned_title] = video_url
+                                page_videos.append((cleaned_title, video_url))
             
             if page_titles:
                 prev_count = len(all_titles)
@@ -108,13 +132,23 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
                 
                 logger.info(f"  JAVDB - Selenium 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
                 
-                if page_num == 1:
+                # 更新智能缓存
+                if smart_cache and model_name:
+                    videos_with_page = [(title, url, page_num) for title, url in page_videos]
+                    smart_cache.add_videos(model_name, videos_with_page)
+                    smart_cache.update_page_timestamp(model_name, page_num)
+                
+                if page_num == 1 or page_num == start_page:
                     sample = list(page_titles)[:5]
                     for i, title in enumerate(sample, 1):
                         logger.info(f"    样本{i}: {title[:80]}{'...' if len(title) > 80 else ''}")
+                
+                consecutive_empty_pages = 0
             else:
                 logger.warning(f"  JAVDB - Selenium 第 {page_num} 页未找到视频标题")
-                if page_num > 1:
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= 2:
+                    logger.info("  JAVDB - 连续2页无数据，停止抓取")
                     break
             
             # 检查是否有下一页
@@ -128,6 +162,9 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
             
             if not has_next:
                 logger.info("  JAVDB - Selenium 没有下一页，停止抓取")
+                # 标记完整抓取完成
+                if smart_cache and model_name:
+                    smart_cache.mark_full_fetch_completed(model_name, page_num)
                 break
             
             # 检查最大页数
@@ -148,8 +185,9 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
     return all_titles, title_to_url
 
 
-def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config: dict = None) -> Tuple[Set[str], Dict[str, str]]:
-    """使用 requests 抓取 JAVDB 视频（原始版本）"""
+def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config: dict = None,
+                                   smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
+    """使用 requests 抓取 JAVDB 视频（支持增量更新）"""
     if config is None:
         config = {}
     headers = {
@@ -175,10 +213,29 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
     
     all_titles = set()
     title_to_url = {}
-    page_num = 1
+    
+    # 确定抓取范围（支持增量更新）
+    start_page = 1
+    if smart_cache and model_name:
+        start_page, max_pages = smart_cache.get_incremental_fetch_range(model_name, max_pages)
+        if start_page > 1:
+            # 加载已缓存的标题
+            cached_titles = smart_cache.get_cached_titles(model_name)
+            all_titles.update(cached_titles)
+            logger.info(f"  JAVDB - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
+    
+    page_num = start_page
+    consecutive_empty_pages = 0
     
     try:
         while True:
+            # 检查该页是否需要更新（智能缓存）
+            if smart_cache and model_name and page_num < start_page + 3:  # 只检查前3页
+                if not smart_cache.should_update_page(model_name, page_num):
+                    logger.debug(f"  JAVDB - 第 {page_num} 页在缓存有效期内，跳过")
+                    page_num += 1
+                    continue
+            
             # 构建分页URL
             page_url = url
             if page_num > 1:
@@ -206,6 +263,7 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                 
                 # JAVDB特定的选择器
                 page_titles = set()
+                page_videos = []  # 用于智能缓存
                 
                 # 选择器1: JAVDB特有的视频标题选择器
                 for elem in soup.select('a.video-title, .movie-title a, .film-title a'):
@@ -219,6 +277,7 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                             if not video_url.startswith('http'):
                                 video_url = urljoin(url, video_url)
                             title_to_url[cleaned_title] = video_url
+                            page_videos.append((cleaned_title, video_url))
                 
                 # 选择器2: 通用标题选择器
                 if not page_titles:
@@ -235,6 +294,7 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                                     if not video_url.startswith('http'):
                                         video_url = urljoin(url, video_url)
                                     title_to_url[cleaned_title] = video_url
+                                    page_videos.append((cleaned_title, video_url))
                 
                 if page_titles:
                     prev_count = len(all_titles)
@@ -243,15 +303,24 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                     
                     logger.info(f"  JAVDB - 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
                     
+                    # 更新智能缓存
+                    if smart_cache and model_name:
+                        videos_with_page = [(title, url, page_num) for title, url in page_videos]
+                        smart_cache.add_videos(model_name, videos_with_page)
+                        smart_cache.update_page_timestamp(model_name, page_num)
+                    
                     # 显示样本
-                    if page_num == 1:
+                    if page_num == 1 or page_num == start_page:
                         sample = list(page_titles)[:5]
                         for i, title in enumerate(sample, 1):
                             logger.info(f"    样本{i}: {title[:80]}{'...' if len(title) > 80 else ''}")
+                    
+                    consecutive_empty_pages = 0
                 else:
                     logger.warning(f"  JAVDB - 第 {page_num} 页未找到视频标题")
-                    # 如果连续2页没有标题，停止
-                    if page_num > 1:
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= 2:
+                        logger.info("  JAVDB - 连续2页无数据，停止抓取")
                         break
                 
                 # 检查是否有下一页
@@ -298,6 +367,9 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                 
                 if not has_next:
                     logger.info("  JAVDB - 没有下一页，停止抓取")
+                    # 标记完整抓取完成
+                    if smart_cache and model_name:
+                        smart_cache.mark_full_fetch_completed(model_name, page_num)
                     break
                 
                 # 检查最大页数

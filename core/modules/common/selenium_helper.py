@@ -13,7 +13,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from webdriver_manager.chrome import ChromeDriverManager
+
+# 导入 Chrome 版本检测模块
+from .chrome_version import get_chromedriver_path, ChromeVersionManager
 
 
 class SeleniumHelper:
@@ -106,17 +108,30 @@ class SeleniumHelper:
         chrome_options.add_experimental_option('prefs', prefs)
         
         try:
-            # 使用 webdriver-manager 自动管理驱动
+            # 使用 Chrome 版本检测模块获取匹配的 ChromeDriver
             chromedriver_path = selenium_config.get('chromedriver_path', '')
             
             if chromedriver_path:
                 # 使用指定路径
                 service = Service(chromedriver_path)
                 self.logger.info(f"Selenium - 使用指定的 ChromeDriver: {chromedriver_path}")
+                
+                # 验证版本兼容性
+                try:
+                    manager = ChromeVersionManager()
+                    compatible, compat_msg = manager.verify_chromedriver_compatibility(chromedriver_path)
+                    if compatible:
+                        self.logger.info(f"Selenium - {compat_msg}")
+                    else:
+                        self.logger.warning(f"Selenium - {compat_msg}")
+                        self.logger.warning("Selenium - 建议更新 ChromeDriver 版本")
+                except Exception as e:
+                    self.logger.debug(f"Selenium - 版本兼容性检查失败: {e}")
             else:
-                # 自动下载并使用
-                self.logger.info("Selenium - 自动下载 ChromeDriver")
-                service = Service(ChromeDriverManager().install())
+                # 自动检测 Chrome 版本并下载匹配的 ChromeDriver
+                self.logger.info("Selenium - 检测 Chrome 版本并下载匹配的 ChromeDriver...")
+                chromedriver_path = get_chromedriver_path(self.config)
+                service = Service(chromedriver_path)
             
             # 创建 WebDriver
             driver = webdriver.Chrome(service=service, options=chrome_options)

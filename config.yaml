@@ -5,6 +5,9 @@ cache:
   enabled: true
   expiration_days: 3650
   max_size_mb: -1
+  # 智能缓存配置（新增）
+  incremental_update: true      # 启用增量更新
+  page_expiry_hours: 24         # 页面缓存过期时间（小时）
 comparison:
   case_sensitive: false
   ignore_list:
@@ -81,6 +84,13 @@ logging:
   max_bytes: 10485760
   missing_video_detail: true
 max_pages: -1
+
+# 多线程配置（新增）
+multithreading:
+  enabled: true                 # 启用多线程
+  max_workers: 3                # 并发工作线程数（建议 3-5）
+  thread_name_prefix: "Worker"  # 线程名前缀
+
 network:
   backoff_factor: 0.5
   headers:

@@ -124,6 +124,12 @@ def load_models(model_path: str = "models.json") -> dict:
         sys.exit(1)
 
 # --- 缓存管理 --- 
+# 导入智能缓存模块
+from .smart_cache import SmartCache, create_smart_cache
+
+# 全局智能缓存实例（延迟初始化）
+_smart_cache_instance: SmartCache = None
+
 def get_cache_dir(config: dict) -> str:
     """获取缓存目录路径"""
     # 确保output目录存在
@@ -141,26 +147,50 @@ def get_model_cache_path(cache_dir: str, model_name: str) -> str:
     safe_model_name = re.sub(r'[^\w\-]', '_', model_name)
     return os.path.join(cache_dir, f"{safe_model_name}.json")
 
+def get_smart_cache(cache_dir: str = None, config: dict = None) -> SmartCache:
+    """
+    获取智能缓存实例（单例模式）
+    
+    Args:
+        cache_dir: 缓存目录
+        config: 配置字典
+        
+    Returns:
+        SmartCache 实例
+    """
+    global _smart_cache_instance
+    if _smart_cache_instance is None:
+        if cache_dir is None:
+            cache_dir = 'output/cache'
+        _smart_cache_instance = create_smart_cache(cache_dir, config)
+    return _smart_cache_instance
+
 def load_cache(cache_path: str) -> Set[str]:
-    """加载缓存文件"""
+    """加载缓存文件（兼容旧版本）"""
     if not os.path.exists(cache_path):
         return set()
     
     try:
         with open(cache_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            # 优先使用新的 videos 结构
+            if 'videos' in data and data['videos']:
+                return set(data['videos'].keys())
+            # 兼容旧版本
             return set(data.get('video_titles', []))
     except Exception as e:
         logging.warning(f"加载缓存失败: {e}")
         return set()
 
 def save_cache(cache_path: str, video_titles: Set[str], model_name: str, url: str):
-    """保存缓存文件"""
+    """保存缓存文件（兼容旧版本）"""
     try:
         data = {
             'model_name': model_name,
             'url': url,
             'video_titles': list(video_titles),
+            'videos': {title: {'url': '', 'page': 0, 'timestamp': datetime.now().isoformat()} 
+                      for title in video_titles},
             'last_updated': datetime.now().isoformat()
         }
         with open(cache_path, 'w', encoding='utf-8') as f:
