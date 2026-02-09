@@ -156,3 +156,20 @@ video_extensions:
 - .mov
 - .wmv
 - .flv
+
+# Pornhub下载配置
+pronhub:
+  # Cookie文件路径（用于访问会员内容）
+  cookies_file: ""
+  # 下载选项
+  download_options:
+    # 最大分辨率（像素高度），0表示不限制
+    max_resolution: 0
+    # 优先格式
+    preferred_format: "mp4"
+    # 是否下载缩略图
+    download_thumbnail: true
+    # 重试次数
+    max_retries: 3
+    # 超时时间（秒）
+    timeout: 300

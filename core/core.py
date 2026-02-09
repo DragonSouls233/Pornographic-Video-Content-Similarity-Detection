@@ -56,6 +56,7 @@ class ModelResult:
     url: str = ""
     local_folder: str = ""
     country: str = ""
+    local_folder_full: str = ""  # 本地目录完整路径
 
 
 class ModelProcessor:
@@ -126,7 +127,8 @@ class ModelProcessor:
             return ModelResult(
                 model_name=model_name,
                 success=False,
-                error_message="用户请求停止"
+                error_message="用户请求停止",
+                local_folder_full=original_dir
             )
         
         # 获取当前线程ID
@@ -162,7 +164,8 @@ class ModelProcessor:
                     error_message="未找到URL",
                     local_count=len(local_set),
                     country=country,
-                    local_folder=original_dir
+                    local_folder=original_dir,
+                    local_folder_full=folder
                 )
             
             # 抓取在线视频标题（使用智能缓存）
@@ -177,7 +180,8 @@ class ModelProcessor:
                     return ModelResult(
                         model_name=model_name,
                         success=False,
-                        error_message="用户请求停止"
+                        error_message="用户请求停止",
+                        local_folder_full=original_dir
                     )
                 
                 try:
@@ -216,6 +220,7 @@ class ModelProcessor:
                     local_count=len(local_set),
                     country=country,
                     local_folder=original_dir,
+                    local_folder_full=folder,
                     url=url
                 )
             
@@ -260,6 +265,7 @@ class ModelProcessor:
                 missing_with_urls=[(title, title_to_url.get(title, "")) for title in missing],
                 url=url,
                 local_folder=original_dir,
+                local_folder_full=folder,
                 country=country
             )
             
@@ -347,7 +353,8 @@ class ModelProcessor:
                 success=False,
                 error_message=str(e),
                 country=country,
-                local_folder=original_dir
+                local_folder=original_dir,
+                local_folder_full=folder
             )
 
 

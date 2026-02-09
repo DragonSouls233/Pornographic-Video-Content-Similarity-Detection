@@ -67,6 +67,7 @@ class ModelManagerGUI:
         
         # 加载模特数据
         self.models = self.load_models()
+        self.current_results = {}  # 初始化当前结果字典
         self.update_model_list()
         
         # 队列用于线程间通信
@@ -165,6 +166,17 @@ class ModelManagerGUI:
         
         # 删除模特
         ttk.Button(action_frame, text="删除模特", command=self.delete_model, width=20).pack(fill=tk.X, pady=5)
+        
+        # 分隔线
+        ttk.Separator(action_frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        
+        # 下载功能
+        ttk.Label(action_frame, text="下载功能", font=("Arial", 10, "bold")).pack(pady=5)
+        ttk.Button(action_frame, text="下载选中模特完整目录", command=self.download_selected_models_complete, width=20).pack(fill=tk.X, pady=2)
+        ttk.Button(action_frame, text="批量下载所有模特", command=self.download_all_models_complete, width=20).pack(fill=tk.X, pady=2)
+        
+        # 分隔线
+        ttk.Separator(action_frame, orient='horizontal').pack(fill=tk.X, pady=10)
         
         # 刷新列表
         ttk.Button(action_frame, text="刷新列表", command=self.refresh_models, width=20).pack(fill=tk.X, pady=5)
@@ -313,11 +325,17 @@ class ModelManagerGUI:
         
         self.result_tree.pack(fill=tk.BOTH, expand=True)
         
-        # 导出按钮
-        export_frame = ttk.Frame(result_frame)
-        export_frame.pack(fill=tk.X, pady=(10, 0))
+        # 操作按钮
+        action_frame = ttk.Frame(result_frame)
+        action_frame.pack(fill=tk.X, pady=(10, 0))
         
-        ttk.Button(export_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
+        # 下载按钮
+        ttk.Button(action_frame, text="下载选中视频", command=self.download_selected_videos).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(action_frame, text="下载所有缺失视频", command=self.download_all_missing_videos).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(action_frame, text="完整下载模特目录", command=self.download_complete_model_directories).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 导出按钮
+        ttk.Button(action_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
     
     def init_browser_proxy_tab(self):
         """初始化浏览器/代理测试标签页（合并）"""
@@ -1521,6 +1539,9 @@ class ModelManagerGUI:
     def update_results_display(self, results):
         """更新结果显示标签页"""
         try:
+            # 存储当前结果供下载使用
+            self.current_results = {result.model_name: result for result in results}
+            
             # 清空现有结果
             for item in self.result_tree.get_children():
                 self.result_tree.delete(item)
@@ -1678,6 +1699,502 @@ class ModelManagerGUI:
 """
         
         messagebox.showinfo("关于", about_text)
+    
+    def download_selected_videos(self):
+        """下载选中的缺失视频"""
+        try:
+            # 获取选中的项目
+            selected_items = self.result_tree.selection()
+            if not selected_items:
+                messagebox.showwarning("提示", "请先选择要下载的视频")
+                return
+            
+            # 收集下载信息
+            download_items = []
+            for item in selected_items:
+                model, title, url = self.result_tree.item(item, "values")
+                if url and url.strip():
+                    download_items.append((model, title, url.strip()))
+            
+            if not download_items:
+                messagebox.showwarning("提示", "选中的项目没有有效的下载链接")
+                return
+            
+            # 确认下载
+            if not messagebox.askyesno("确认下载", f"确定要下载选中的 {len(download_items)} 个视频吗？"):
+                return
+            
+            # 开始下载
+            self._download_videos(download_items)
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"下载失败: {e}")
+    
+    def download_all_missing_videos(self):
+        """下载所有缺失视频"""
+        try:
+            # 收集所有缺失视频
+            download_items = []
+            for item in self.result_tree.get_children():
+                model, title, url = self.result_tree.item(item, "values")
+                if url and url.strip():
+                    download_items.append((model, title, url.strip()))
+            
+            if not download_items:
+                messagebox.showwarning("提示", "没有可下载的视频")
+                return
+            
+            # 确认下载
+            if not messagebox.askyesno("确认下载", f"确定要下载所有 {len(download_items)} 个缺失视频吗？\n注意：这可能需要很长时间！"):
+                return
+            
+            # 开始下载
+            self._download_videos(download_items)
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"下载失败: {e}")
+    
+    def _download_videos(self, download_items):
+        """执行视频下载"""
+        try:
+            # 导入下载模块
+            from core.modules.pronhub.downloader import PornhubDownloader
+            import threading
+            import queue
+            
+            # 创建下载进度对话框
+            progress_window = tk.Toplevel(self.root)
+            progress_window.title("下载进度")
+            progress_window.geometry("600x400")
+            progress_window.transient(self.root)
+            progress_window.grab_set()
+            
+            # 进度显示
+            ttk.Label(progress_window, text="下载进度:", font=("Arial", 12, "bold")).pack(pady=10)
+            
+            progress_text = tk.Text(progress_window, height=15, width=70)
+            progress_scrollbar = ttk.Scrollbar(progress_window, orient=tk.VERTICAL, command=progress_text.yview)
+            progress_text.configure(yscrollcommand=progress_scrollbar.set)
+            
+            progress_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+            progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
+            
+            # 进度队列
+            progress_queue = queue.Queue()
+            
+            def download_worker():
+                """下载工作线程"""
+                try:
+                    # 获取配置
+                    config = self.load_config()
+                    
+                    # 创建下载器
+                    downloader = PornhubDownloader(config)
+                    
+                    total_count = len(download_items)
+                    for i, (model, title, url) in enumerate(download_items, 1):
+                        try:
+                            progress_queue.put(f"开始下载 ({i}/{total_count}): {title[:50]}...")
+                            
+                            # 确定保存目录（模特目录）
+                            save_dir = None
+                            # 查找模特的本地目录
+                            for result_key, result_value in getattr(self, 'current_results', {}).items():
+                                if hasattr(result_value, 'model_name') and result_value.model_name == model:
+                                    if hasattr(result_value, 'local_folder_full') and result_value.local_folder_full:
+                                        save_dir = result_value.local_folder_full
+                                    break
+                            
+                            # 执行下载
+                            result = downloader.download_single_video(url, save_dir)
+                            
+                            if result['success']:
+                                progress_queue.put(f"✅ 下载成功: {title[:50]}... -> {result.get('file_path', 'N/A')}")
+                            else:
+                                progress_queue.put(f"❌ 下载失败: {title[:50]}... - {result.get('message', result.get('error', 'Unknown error'))}")
+                            
+                        except Exception as e:
+                            progress_queue.put(f"❌ 下载异常: {title[:50]}... - {str(e)}")
+                    
+                    progress_queue.put("下载任务完成！")
+                    
+                except Exception as e:
+                    progress_queue.put(f"下载器错误: {str(e)}")
+                finally:
+                    progress_queue.put("DOWNLOAD_COMPLETE")
+            
+            def update_progress():
+                """更新进度显示"""
+                try:
+                    while True:
+                        try:
+                            message = progress_queue.get_nowait()
+                            if message == "DOWNLOAD_COMPLETE":
+                                ttk.Button(progress_window, text="关闭", command=progress_window.destroy).pack(pady=10)
+                                break
+                            else:
+                                progress_text.insert(tk.END, message + "\n")
+                                progress_text.see(tk.END)
+                                progress_window.update()
+                        except queue.Empty:
+                            break
+                    
+                    # 继续检查进度
+                    if progress_window.winfo_exists():
+                        progress_window.after(100, update_progress)
+                except:
+                    pass
+            
+            # 启动下载线程
+            download_thread = threading.Thread(target=download_worker, daemon=True)
+            download_thread.start()
+            
+            # 启动进度更新
+            update_progress()
+            
+            # 显示窗口
+            progress_window.mainloop()
+            
+        except ImportError as e:
+            messagebox.showerror("错误", f"下载模块导入失败: {e}\n请确保已安装 yt-dlp: pip install yt-dlp")
+        except Exception as e:
+            messagebox.showerror("错误", f"下载失败: {e}")
+    
+    def download_complete_model_directories(self):
+        """完整下载模特目录"""
+        try:
+            # 检查是否有结果数据
+            if not hasattr(self, 'current_results') or not self.current_results:
+                messagebox.showwarning("提示", "请先运行查重分析获取模特数据")
+                return
+            
+            # 创建模特选择对话框
+            dialog = tk.Toplevel(self.root)
+            dialog.title("完整下载模特目录")
+            dialog.geometry("500x400")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            # 说明
+            ttk.Label(dialog, text="选择要完整下载的模特目录:", font=("Arial", 12, "bold")).pack(pady=10)
+            ttk.Label(dialog, text="⚠️ 完整下载会下载该模特的所有视频，可能需要很长时间", foreground="red").pack(pady=5)
+            
+            # 模特列表框架
+            list_frame = ttk.Frame(dialog)
+            list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # 创建带滚动条的列表框
+            scrollbar = ttk.Scrollbar(list_frame)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            model_listbox = tk.Listbox(list_frame, selectmode=tk.MULTIPLE, yscrollcommand=scrollbar.set)
+            model_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.config(command=model_listbox.yview)
+            
+            # 填充模特列表
+            model_names = []
+            for model_name, result in self.current_results.items():
+                if result.success and result.url:
+                    model_listbox.insert(tk.END, f"{model_name} (本地: {result.local_count}, 缺失: {result.missing_count})")
+                    model_names.append(model_name)
+            
+            # 选项框架
+            options_frame = ttk.Frame(dialog)
+            options_frame.pack(fill=tk.X, padx=10, pady=10)
+            
+            # 最大下载数量
+            ttk.Label(options_frame, text="每个模特最大下载数量:").pack(side=tk.LEFT)
+            max_videos_var = tk.StringVar(value="0")  # 0表示无限制
+            max_videos_entry = ttk.Entry(options_frame, textvariable=max_videos_var, width=10)
+            max_videos_entry.pack(side=tk.LEFT, padx=5)
+            ttk.Label(options_frame, text="(0=无限制)").pack(side=tk.LEFT)
+            
+            # 按钮框架
+            button_frame = ttk.Frame(dialog)
+            button_frame.pack(fill=tk.X, padx=10, pady=10)
+            
+            def start_download():
+                """开始下载"""
+                selected_indices = model_listbox.curselection()
+                if not selected_indices:
+                    messagebox.showwarning("提示", "请选择至少一个模特")
+                    return
+                
+                # 获取选择的模特
+                selected_models = []
+                for idx in selected_indices:
+                    model_name = model_names[idx]
+                    result = self.current_results[model_name]
+                    if result.success and result.url:
+                        selected_models.append((model_name, result.url, result.local_folder_full))
+                
+                # 获取最大下载数量
+                try:
+                    max_videos = int(max_videos_var.get()) if max_videos_var.get().strip() else 0
+                except ValueError:
+                    max_videos = 0
+                
+                # 确认下载
+                total_videos_estimate = len(selected_models) * (max_videos if max_videos > 0 else 50)  # 估算
+                confirm_msg = f"确定要完整下载 {len(selected_models)} 个模特的目录吗？\n"
+                confirm_msg += f"预计下载大量视频（可能超过 {total_videos_estimate} 个）\n"
+                confirm_msg += "这将消耗大量时间和存储空间！"
+                
+                if not messagebox.askyesno("确认下载", confirm_msg):
+                    return
+                
+                # 关闭对话框
+                dialog.destroy()
+                
+                # 开始下载
+                self._download_complete_directories(selected_models, max_videos)
+            
+            ttk.Button(button_frame, text="开始下载", command=start_download).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+            
+            # 居中显示
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+            y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+            dialog.geometry(f"+{x}+{y}")
+            
+            dialog.mainloop()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"打开模特选择对话框失败: {e}")
+    
+    def _download_complete_directories(self, models_info, max_videos_per_model=0):
+        """执行完整目录下载"""
+        try:
+            # 导入批量下载函数
+            from core.modules.pronhub.downloader import batch_download_models
+            import threading
+            import queue
+            
+            # 创建下载进度对话框
+            progress_window = tk.Toplevel(self.root)
+            progress_window.title("完整目录下载进度")
+            progress_window.geometry("700x500")
+            progress_window.transient(self.root)
+            progress_window.grab_set()
+            
+            # 进度显示
+            ttk.Label(progress_window, text="完整目录下载进度:", font=("Arial", 12, "bold")).pack(pady=10)
+            
+            progress_text = tk.Text(progress_window, height=20, width=80)
+            progress_scrollbar = ttk.Scrollbar(progress_window, orient=tk.VERTICAL, command=progress_text.yview)
+            progress_text.configure(yscrollcommand=progress_scrollbar.set)
+            
+            progress_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+            progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
+            
+            # 进度队列
+            progress_queue = queue.Queue()
+            
+            def download_worker():
+                """下载工作线程"""
+                try:
+                    # 获取配置
+                    config = self.load_config()
+                    
+                    def progress_callback(msg):
+                        progress_queue.put(msg)
+                    
+                    # 执行批量下载
+                    result = batch_download_models(
+                        models_info=models_info,
+                        base_save_dir=None,  # 使用默认输出目录
+                        config=config,
+                        max_videos_per_model=max_videos_per_model if max_videos_per_model > 0 else None,
+                        progress_callback=progress_callback
+                    )
+                    
+                    progress_queue.put("=" * 60)
+                    progress_queue.put("批量下载完成！")
+                    progress_queue.put(f"总模特数: {result['total_models']}")
+                    progress_queue.put(f"成功模特数: {result['successful_models']}")
+                    progress_queue.put(f"失败模特数: {result['failed_models']}")
+                    progress_queue.put(f"总视频数: {result['total_videos']}")
+                    progress_queue.put(f"已下载数: {result['total_downloaded']}")
+                    progress_queue.put(f"总大小: {result['total_size'] / (1024*1024*1024):.2f} GB")
+                    progress_queue.put("=" * 60)
+                    
+                    # 显示详细结果
+                    for model_result in result.get('model_results', []):
+                        model_name = model_result.get('model_name', 'Unknown')
+                        if model_result.get('success'):
+                            progress_queue.put(f"\n✅ {model_name}:")
+                            progress_queue.put(f"  成功: {model_result.get('successful_downloads', 0)}")
+                            progress_queue.put(f"  失败: {model_result.get('failed_downloads', 0)}")
+                            progress_queue.put(f"  跳过: {model_result.get('skipped_downloads', 0)}")
+                        else:
+                            progress_queue.put(f"\n❌ {model_name}: {model_result.get('message', 'Unknown error')}")
+                    
+                    progress_queue.put("DOWNLOAD_COMPLETE")
+                    
+                except Exception as e:
+                    progress_queue.put(f"批量下载器错误: {str(e)}")
+                    progress_queue.put("DOWNLOAD_COMPLETE")
+            
+            def update_progress():
+                """更新进度显示"""
+                try:
+                    while True:
+                        try:
+                            message = progress_queue.get_nowait()
+                            if message == "DOWNLOAD_COMPLETE":
+                                ttk.Button(progress_window, text="关闭", command=progress_window.destroy).pack(pady=10)
+                                break
+                            else:
+                                progress_text.insert(tk.END, message + "\n")
+                                progress_text.see(tk.END)
+                                progress_window.update()
+                        except queue.Empty:
+                            break
+                    
+                    # 继续检查进度
+                    if progress_window.winfo_exists():
+                        progress_window.after(100, update_progress)
+                except:
+                    pass
+            
+            # 启动下载线程
+            download_thread = threading.Thread(target=download_worker, daemon=True)
+            download_thread.start()
+            
+            # 启动进度更新
+            update_progress()
+            
+            # 显示窗口
+            progress_window.mainloop()
+            
+        except ImportError as e:
+            messagebox.showerror("错误", f"下载模块导入失败: {e}\n请确保已安装 yt-dlp: pip install yt-dlp")
+        except Exception as e:
+            messagebox.showerror("错误", f"完整目录下载失败: {e}")
+    
+    def download_selected_models_complete(self):
+        """下载选中模特的完整目录"""
+        try:
+            # 获取选中的模特
+            selected_items = self.model_tree.selection()
+            if not selected_items:
+                messagebox.showwarning("提示", "请先选择要下载的模特")
+                return
+            
+            selected_models = []
+            for item in selected_items:
+                model_name = self.model_tree.item(item, "values")[0]
+                url = self.model_tree.item(item, "values")[1]
+                if url and url.strip():
+                    selected_models.append((model_name, url.strip(), None))
+            
+            if not selected_models:
+                messagebox.showwarning("提示", "选中的模特没有有效的URL")
+                return
+            
+            # 询问最大下载数量
+            max_videos_dialog = tk.Toplevel(self.root)
+            max_videos_dialog.title("下载设置")
+            max_videos_dialog.geometry("300x150")
+            max_videos_dialog.transient(self.root)
+            max_videos_dialog.grab_set()
+            
+            ttk.Label(max_videos_dialog, text="每个模特最大下载数量:", font=("Arial", 10)).pack(pady=20)
+            
+            max_videos_var = tk.StringVar(value="0")
+            ttk.Entry(max_videos_dialog, textvariable=max_videos_var, width=10).pack(pady=10)
+            ttk.Label(max_videos_dialog, text="(0=无限制)").pack()
+            
+            def confirm_download():
+                try:
+                    max_videos = int(max_videos_var.get()) if max_videos_var.get().strip() else 0
+                    max_videos_dialog.destroy()
+                    
+                    # 确认下载
+                    confirm_msg = f"确定要完整下载 {len(selected_models)} 个选中模特的目录吗？\n"
+                    confirm_msg += "这将下载每个模特的所有视频！"
+                    
+                    if messagebox.askyesno("确认下载", confirm_msg):
+                        self._download_complete_directories(selected_models, max_videos)
+                except ValueError:
+                    messagebox.showerror("错误", "请输入有效的数字")
+            
+            button_frame = ttk.Frame(max_videos_dialog)
+            button_frame.pack(pady=20)
+            ttk.Button(button_frame, text="确定", command=confirm_download).pack(side=tk.LEFT, padx=10)
+            ttk.Button(button_frame, text="取消", command=max_videos_dialog.destroy).pack(side=tk.LEFT, padx=10)
+            
+            # 居中显示
+            max_videos_dialog.update_idletasks()
+            x = (max_videos_dialog.winfo_screenwidth() // 2) - (max_videos_dialog.winfo_width() // 2)
+            y = (max_videos_dialog.winfo_screenheight() // 2) - (max_videos_dialog.winfo_height() // 2)
+            max_videos_dialog.geometry(f"+{x}+{y}")
+            
+            max_videos_dialog.mainloop()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"下载选中模特失败: {e}")
+    
+    def download_all_models_complete(self):
+        """批量下载所有模特的完整目录"""
+        try:
+            # 获取所有模特
+            all_models = []
+            for item in self.model_tree.get_children():
+                model_name = self.model_tree.item(item, "values")[0]
+                url = self.model_tree.item(item, "values")[1]
+                if url and url.strip():
+                    all_models.append((model_name, url.strip(), None))
+            
+            if not all_models:
+                messagebox.showwarning("提示", "没有可下载的模特")
+                return
+            
+            # 询问最大下载数量
+            max_videos_dialog = tk.Toplevel(self.root)
+            max_videos_dialog.title("批量下载设置")
+            max_videos_dialog.geometry("300x150")
+            max_videos_dialog.transient(self.root)
+            max_videos_dialog.grab_set()
+            
+            ttk.Label(max_videos_dialog, text="每个模特最大下载数量:", font=("Arial", 10)).pack(pady=20)
+            
+            max_videos_var = tk.StringVar(value="50")  # 默认限制50个
+            ttk.Entry(max_videos_dialog, textvariable=max_videos_var, width=10).pack(pady=10)
+            ttk.Label(max_videos_dialog, text="(0=无限制)").pack()
+            
+            def confirm_download():
+                try:
+                    max_videos = int(max_videos_var.get()) if max_videos_var.get().strip() else 0
+                    max_videos_dialog.destroy()
+                    
+                    # 确认下载
+                    confirm_msg = f"确定要批量下载所有 {len(all_models)} 个模特的完整目录吗？\n"
+                    if max_videos > 0:
+                        confirm_msg += f"每个模特最多下载 {max_videos} 个视频\n"
+                    confirm_msg += "这将下载大量视频并消耗大量时间和存储空间！"
+                    
+                    if messagebox.askyesno("确认批量下载", confirm_msg):
+                        self._download_complete_directories(all_models, max_videos)
+                except ValueError:
+                    messagebox.showerror("错误", "请输入有效的数字")
+            
+            button_frame = ttk.Frame(max_videos_dialog)
+            button_frame.pack(pady=20)
+            ttk.Button(button_frame, text="确定", command=confirm_download).pack(side=tk.LEFT, padx=10)
+            ttk.Button(button_frame, text="取消", command=max_videos_dialog.destroy).pack(side=tk.LEFT, padx=10)
+            
+            # 居中显示
+            max_videos_dialog.update_idletasks()
+            x = (max_videos_dialog.winfo_screenwidth() // 2) - (max_videos_dialog.winfo_width() // 2)
+            y = (max_videos_dialog.winfo_screenheight() // 2) - (max_videos_dialog.winfo_height() // 2)
+            max_videos_dialog.geometry(f"+{x}+{y}")
+            
+            max_videos_dialog.mainloop()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"批量下载所有模特失败: {e}")
     
     def open_browser_window(self):
         """打开独立的浏览器窗口"""

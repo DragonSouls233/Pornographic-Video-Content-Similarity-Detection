@@ -31,6 +31,9 @@ python-dateutil>=2.8.0
 # 日志和调试
 colorama>=0.4.6
 
+# 视频下载
+yt-dlp>=2023.12.0
+
 # 可选：GUI 浏览器组件
 # tkinterweb>=3.18.0        # GUI 内置浏览器（可选）
 
