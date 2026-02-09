@@ -70,6 +70,9 @@ pyinstaller --clean \
     --hidden-import socket \
     --hidden-import hashlib \
     --hidden-import json \
+    --hidden-import aiohttp \
+    --hidden-import aiofiles \
+    --hidden-import asyncio \
     --hidden-import os \
     --hidden-import time \
     --hidden-import random \
