@@ -12,11 +12,11 @@ import sys
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
-# 导入内置浏览器模块
-from browser import BrowserTab
-
 # 导入默认配置模板
-from config_template import DEFAULT_CONFIG
+try:
+    from gui.config_template import DEFAULT_CONFIG
+except ImportError:
+    from config_template import DEFAULT_CONFIG
 
 class ModelManagerGUI:
     def __init__(self, root):
@@ -55,20 +55,15 @@ class ModelManagerGUI:
         self.result_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.result_tab, text="结果显示")
         
-        # 创建内置浏览器标签页
-        self.browser_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.browser_tab, text="内置浏览器")
-        
-        # 创建代理测试标签页
-        self.proxy_test_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.proxy_test_tab, text="代理测试")
+        # 创建浏览器/代理测试标签页（合并）
+        self.browser_proxy_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.browser_proxy_tab, text="浏览器/代理测试")
         
         # 初始化各标签页
         self.init_model_tab()
         self.init_run_tab()
         self.init_result_tab()
-        self.init_browser_tab()
-        self.init_proxy_test_tab()
+        self.init_browser_proxy_tab()
         
         # 加载模特数据
         self.models = self.load_models()
@@ -77,6 +72,8 @@ class ModelManagerGUI:
         # 队列用于线程间通信
         self.queue = queue.Queue()
         self.running = False
+        self.thread = None
+        self.public_ip_var = tk.StringVar(value="000.000.000.000")
     
     def create_menu(self):
         """创建菜单栏"""
@@ -214,10 +211,10 @@ class ModelManagerGUI:
             self.dir_listbox.insert(tk.END, "F:\\作品")
             self.save_local_dirs()
         
-        # 抓取工具选择
+        # 抓取工具选择（固定为selenium）
         ttk.Label(config_frame, text="抓取工具: ").pack(side=tk.LEFT)
         self.scraper_var = tk.StringVar(value="selenium")
-        scraper_combobox = ttk.Combobox(config_frame, textvariable=self.scraper_var, values=["selenium", "playwright", "drissionpage", "zendriver"], width=15)
+        scraper_combobox = ttk.Combobox(config_frame, textvariable=self.scraper_var, values=["selenium"], width=15, state="readonly")
         scraper_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
         # 最大翻页
@@ -313,52 +310,154 @@ class ModelManagerGUI:
         
         ttk.Button(export_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
     
-    def init_browser_tab(self):
-        """初始化内置浏览器标签页"""
-        # 使用独立的浏览器模块
-        self.browser = BrowserTab(self.browser_tab)
-    
-    def init_proxy_test_tab(self):
-        """初始化代理测试标签页"""
+    def init_browser_proxy_tab(self):
+        """初始化浏览器/代理测试标签页（合并）"""
         # 创建主框架
-        frame = ttk.Frame(self.proxy_test_tab, padding="10")
+        frame = ttk.Frame(self.browser_proxy_tab, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
         
-        # 测试目标设置
-        test_frame = ttk.LabelFrame(frame, text="测试设置", padding="10")
-        test_frame.pack(fill=tk.X, pady=(0, 10))
+        # 左侧：浏览器功能
+        browser_frame = ttk.LabelFrame(frame, text="浏览器", padding="10")
+        browser_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
-        # 测试URL
-        ttk.Label(test_frame, text="测试URL: ").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.test_url_var = tk.StringVar(value="https://www.google.com")
-        ttk.Entry(test_frame, textvariable=self.test_url_var, width=40).grid(row=0, column=1, sticky=tk.W, pady=5)
+        # 地址栏
+        url_frame = ttk.Frame(browser_frame)
+        url_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # 超时设置
-        ttk.Label(test_frame, text="超时(秒): ").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.timeout_var = tk.StringVar(value="10")
-        ttk.Entry(test_frame, textvariable=self.timeout_var, width=10).grid(row=1, column=1, sticky=tk.W, pady=5)
+        self.browser_url_var = tk.StringVar(value="https://www.google.com")
+        url_entry = ttk.Entry(url_frame, textvariable=self.browser_url_var, width=40)
+        url_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        # 测试结果显示
-        result_frame = ttk.LabelFrame(frame, text="测试结果", padding="10")
+        ttk.Button(url_frame, text="前往", command=self.browser_go, width=8).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(url_frame, text="刷新", command=self.browser_refresh, width=8).pack(side=tk.LEFT)
+        
+        # 代理配置显示
+        config_frame = ttk.LabelFrame(browser_frame, text="当前代理配置", padding="10")
+        config_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # 加载并显示代理配置
+        config = self.load_config()
+        proxy_config = config.get("network", {}).get("proxy", {})
+        
+        self.proxy_info_text = tk.Text(config_frame, height=6, wrap=tk.WORD, font=("Consolas", 9))
+        self.proxy_info_text.pack(fill=tk.X)
+        self.proxy_info_text.insert(tk.END, f"状态: {'启用' if proxy_config.get('enabled', False) else '禁用'}\n")
+        self.proxy_info_text.insert(tk.END, f"类型: {proxy_config.get('type', 'socks5').upper()}\n")
+        self.proxy_info_text.insert(tk.END, f"主机: {proxy_config.get('host', '127.0.0.1')}\n")
+        self.proxy_info_text.insert(tk.END, f"端口: {proxy_config.get('port', '10808')}\n")
+        self.proxy_info_text.config(state=tk.DISABLED)
+        
+        # 浏览器测试结果区域
+        result_frame = ttk.LabelFrame(browser_frame, text="测试结果", padding="10")
         result_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 结果文本框
-        self.test_result_text = tk.Text(result_frame, height=15, wrap=tk.WORD)
-        self.test_result_text.pack(fill=tk.BOTH, expand=True)
+        self.browser_result_text = tk.Text(result_frame, height=10, wrap=tk.WORD, font=("Consolas", 9))
+        self.browser_result_text.pack(fill=tk.BOTH, expand=True)
         
-        # 添加滚动条
-        scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.test_result_text.yview)
-        self.test_result_text.configure(yscroll=scrollbar.set)
+        scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.browser_result_text.yview)
+        self.browser_result_text.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # 测试按钮
-        button_frame = ttk.Frame(frame)
+        # 右侧：代理测试功能
+        proxy_frame = ttk.LabelFrame(frame, text="代理测试", padding="10")
+        proxy_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        
+        # 测试设置
+        test_setting_frame = ttk.Frame(proxy_frame)
+        test_setting_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(test_setting_frame, text="测试URL:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.test_url_var = tk.StringVar(value="https://www.google.com")
+        ttk.Entry(test_setting_frame, textvariable=self.test_url_var, width=35).grid(row=0, column=1, sticky=tk.W, pady=5)
+        
+        ttk.Label(test_setting_frame, text="超时(秒):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.timeout_var = tk.StringVar(value="10")
+        ttk.Entry(test_setting_frame, textvariable=self.timeout_var, width=10).grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        # 代理测试结果
+        proxy_result_frame = ttk.LabelFrame(proxy_frame, text="代理测试结果", padding="10")
+        proxy_result_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.proxy_test_result_text = tk.Text(proxy_result_frame, height=12, wrap=tk.WORD, font=("Consolas", 9))
+        self.proxy_test_result_text.pack(fill=tk.BOTH, expand=True)
+        
+        scrollbar2 = ttk.Scrollbar(proxy_result_frame, orient=tk.VERTICAL, command=self.proxy_test_result_text.yview)
+        self.proxy_test_result_text.configure(yscroll=scrollbar2.set)
+        scrollbar2.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 按钮框架
+        button_frame = ttk.Frame(proxy_frame)
         button_frame.pack(fill=tk.X, pady=(10, 0))
         
-        ttk.Button(button_frame, text="测试代理连接", command=self.test_proxy_connection).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="获取公网IP", command=self.refresh_public_ip).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="PING测试", command=self.ping_test).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="清空结果", command=self.clear_test_results).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="测试连接", command=self.test_proxy_connection, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="获取公网IP", command=self.refresh_public_ip, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="清空结果", command=self.clear_test_results, width=12).pack(side=tk.RIGHT, padx=5)
+    
+    def browser_go(self):
+        """浏览器前往指定地址（使用系统浏览器测试代理）"""
+        url = self.browser_url_var.get().strip()
+        if url:
+            try:
+                # 显示测试信息
+                self.browser_result_text.delete(1.0, tk.END)
+                self.browser_result_text.insert(tk.END, f"📡 正在测试访问: {url}\n\n")
+                
+                # 使用requests测试代理连接
+                config = self.load_config()
+                proxy_config = config.get("network", {}).get("proxy", {})
+                
+                proxies = {}
+                if proxy_config.get("enabled", False):
+                    http_proxy = proxy_config.get("http", "")
+                    https_proxy = proxy_config.get("https", "")
+                    if http_proxy:
+                        proxies["http"] = http_proxy
+                        proxies["https"] = https_proxy
+                    self.browser_result_text.insert(tk.END, f"✅ 使用代理: {http_proxy}\n\n")
+                else:
+                    self.browser_result_text.insert(tk.END, "⚠️  未启用代理，使用直接连接\n\n")
+                
+                self.browser_result_text.insert(tk.END, "⏳ 正在连接...\n")
+                self.browser_result_text.update()
+                
+                import requests
+                start_time = time.time()
+                response = requests.get(url, proxies=proxies, timeout=15, verify=False)
+                end_time = time.time()
+                
+                self.browser_result_text.insert(tk.END, f"\n✅ 连接成功!\n")
+                self.browser_result_text.insert(tk.END, f"   状态码: {response.status_code}\n")
+                self.browser_result_text.insert(tk.END, f"   响应时间: {end_time - start_time:.2f}秒\n")
+                self.browser_result_text.insert(tk.END, f"   内容长度: {len(response.content)}字节\n\n")
+                
+                # 尝试获取页面标题
+                try:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, "html.parser")
+                    title = soup.title.string if soup.title else "无标题"
+                    self.browser_result_text.insert(tk.END, f"📄 页面标题: {title}\n\n")
+                except:
+                    pass
+                
+                # 询问是否在系统浏览器中打开
+                if messagebox.askyesno("测试成功", f"代理连接测试成功！\n\n是否在系统浏览器中打开该网页？"):
+                    import webbrowser
+                    webbrowser.open(url)
+                    
+            except Exception as e:
+                self.browser_result_text.delete(1.0, tk.END)
+                self.browser_result_text.insert(tk.END, f"❌ 连接失败!\n\n")
+                self.browser_result_text.insert(tk.END, f"错误信息: {str(e)}\n\n")
+                self.browser_result_text.insert(tk.END, "💡 请检查:\n")
+                self.browser_result_text.insert(tk.END, "   1. 代理工具是否已启动\n")
+                self.browser_result_text.insert(tk.END, "   2. 代理配置是否正确\n")
+                self.browser_result_text.insert(tk.END, "   3. 网络连接是否正常\n")
+                messagebox.showerror("连接失败", f"代理连接测试失败!\n\n{str(e)}")
+    
+    def browser_refresh(self):
+        """浏览器刷新当前页面"""
+        # 重新测试当前URL
+        self.browser_go()
     
     def test_proxy_connection(self):
         """测试代理连接"""
@@ -370,10 +469,10 @@ class ModelManagerGUI:
             timeout = int(self.timeout_var.get().strip())
             
             # 清空结果
-            self.test_result_text.delete(1.0, tk.END)
-            self.test_result_text.insert(tk.END, f"开始测试代理连接...\n")
-            self.test_result_text.insert(tk.END, f"测试URL: {url}\n")
-            self.test_result_text.insert(tk.END, f"超时设置: {timeout}秒\n\n")
+            self.proxy_test_result_text.delete(1.0, tk.END)
+            self.proxy_test_result_text.insert(tk.END, f"开始测试代理连接...\n")
+            self.proxy_test_result_text.insert(tk.END, f"测试URL: {url}\n")
+            self.proxy_test_result_text.insert(tk.END, f"超时设置: {timeout}秒\n\n")
             
             # 加载配置
             config = self.load_config()
@@ -399,11 +498,11 @@ class ModelManagerGUI:
                         "http": proxy_url,
                         "https": proxy_url
                     }
-                    self.test_result_text.insert(tk.END, f"使用代理: {proxy_url}\n\n")
+                    self.proxy_test_result_text.insert(tk.END, f"使用代理: {proxy_url}\n\n")
                 else:
-                    self.test_result_text.insert(tk.END, "警告: 代理已启用但未设置主机和端口\n\n")
+                    self.proxy_test_result_text.insert(tk.END, "警告: 代理已启用但未设置主机和端口\n\n")
             else:
-                self.test_result_text.insert(tk.END, "未使用代理（直接连接）\n\n")
+                self.proxy_test_result_text.insert(tk.END, "未使用代理（直接连接）\n\n")
             
             # 测试连接
             start_time = time.time()
@@ -411,31 +510,31 @@ class ModelManagerGUI:
             end_time = time.time()
             
             # 显示结果
-            self.test_result_text.insert(tk.END, f"测试成功!\n")
-            self.test_result_text.insert(tk.END, f"响应状态码: {response.status_code}\n")
-            self.test_result_text.insert(tk.END, f"响应时间: {end_time - start_time:.2f}秒\n")
-            self.test_result_text.insert(tk.END, f"响应内容长度: {len(response.content)}字节\n\n")
+            self.proxy_test_result_text.insert(tk.END, f"测试成功!\n")
+            self.proxy_test_result_text.insert(tk.END, f"响应状态码: {response.status_code}\n")
+            self.proxy_test_result_text.insert(tk.END, f"响应时间: {end_time - start_time:.2f}秒\n")
+            self.proxy_test_result_text.insert(tk.END, f"响应内容长度: {len(response.content)}字节\n\n")
             
             # 尝试获取页面标题
             try:
                 from bs4 import BeautifulSoup
                 soup = BeautifulSoup(response.content, "html.parser")
                 title = soup.title.string if soup.title else "无标题"
-                self.test_result_text.insert(tk.END, f"页面标题: {title}\n")
+                self.proxy_test_result_text.insert(tk.END, f"页面标题: {title}\n")
             except ImportError:
                 pass
             
-            self.test_result_text.insert(tk.END, "\n代理连接测试通过！")
+            self.proxy_test_result_text.insert(tk.END, "\n代理连接测试通过！")
             
         except requests.exceptions.RequestException as e:
-            self.test_result_text.insert(tk.END, f"测试失败: {e}\n")
-            self.test_result_text.insert(tk.END, "\n代理连接测试失败，请检查代理设置！")
+            self.proxy_test_result_text.insert(tk.END, f"测试失败: {e}\n")
+            self.proxy_test_result_text.insert(tk.END, "\n代理连接测试失败，请检查代理设置！")
         except Exception as e:
-            self.test_result_text.insert(tk.END, f"错误: {e}\n")
+            self.proxy_test_result_text.insert(tk.END, f"错误: {e}\n")
     
     def clear_test_results(self):
         """清空测试结果"""
-        self.test_result_text.delete(1.0, tk.END)
+        self.proxy_test_result_text.delete(1.0, tk.END)
     
     def generate_proxy_url(self, enabled, proxy_type, host, port, proxy_id, password):
         """生成代理URL"""
@@ -657,6 +756,7 @@ class ModelManagerGUI:
             
             # 构建代理字典
             proxies = {}
+            proxy_url = ""
             if proxy_config.get("enabled", False):
                 proxy_host = proxy_config.get("host", "").strip()
                 proxy_port = proxy_config.get("port", "").strip()
@@ -693,7 +793,7 @@ class ModelManagerGUI:
             result_text += "\n".join(results)
             
             # 添加代理信息
-            if proxies:
+            if proxies and proxy_url:
                 result_text += f"\n\n使用代理: {proxy_url}"
             else:
                 result_text += "\n\n未使用代理（直接连接）"
@@ -932,7 +1032,11 @@ class ModelManagerGUI:
                     # 传递一个函数，用于检查运行状态
                     def check_running():
                         return self.running
-                    core_module.main(self.module_var.get(), dirs, self.scraper_var.get(), check_running)
+                    results = core_module.main(self.module_var.get(), dirs, self.scraper_var.get(), check_running)
+                    
+                    # 发送结果数据到GUI
+                    if results:
+                        self.queue.put(("results", results))
                 finally:
                     # 恢复原有日志处理器
                     original_logger.removeHandler(queue_handler)
@@ -962,6 +1066,9 @@ class ModelManagerGUI:
                     self.log_text.see(tk.END)
                 elif msg_type == "progress":
                     self.progress_var.set(msg)
+                elif msg_type == "results":
+                    # 更新结果显示标签页
+                    self.update_results_display(msg)
                 elif msg_type == "completed":
                     self.status_var.set("运行完成")
                     self.progress_var.set(100)
@@ -1054,6 +1161,23 @@ class ModelManagerGUI:
         retry_var = tk.StringVar(value=str(config.get("retry_on_fail", 2)))
         ttk.Entry(basic_frame, textvariable=retry_var, width=10).grid(row=5, column=1, sticky=tk.W, pady=5)
         
+        # 性能设置标签页
+        perf_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(perf_frame, text="性能设置")
+        
+        # 多线程配置
+        multithreading_config = config.get("multithreading", {})
+        
+        # 多线程启用复选框
+        mt_enabled_var = tk.BooleanVar(value=multithreading_config.get("enabled", True))
+        ttk.Checkbutton(perf_frame, text="启用多线程", variable=mt_enabled_var).grid(row=0, column=0, sticky=tk.W, pady=10)
+        
+        # 工作线程数
+        ttk.Label(perf_frame, text="工作线程数: ").grid(row=1, column=0, sticky=tk.W, pady=5)
+        mt_workers_var = tk.StringVar(value=str(multithreading_config.get("max_workers", 3)))
+        ttk.Entry(perf_frame, textvariable=mt_workers_var, width=10).grid(row=1, column=1, sticky=tk.W, pady=5)
+        ttk.Label(perf_frame, text="（建议3-5个）").grid(row=1, column=2, sticky=tk.W, pady=5)
+        
         # 代理设置标签页
         proxy_frame = ttk.Frame(notebook, padding="10")
         notebook.add(proxy_frame, text="代理设置")
@@ -1130,6 +1254,13 @@ class ModelManagerGUI:
                     "max": float(delay_max_var.get())
                 }
                 config["retry_on_fail"] = int(retry_var.get())
+                
+                # 保存多线程配置
+                if "multithreading" not in config:
+                    config["multithreading"] = {}
+                config["multithreading"]["enabled"] = mt_enabled_var.get()
+                config["multithreading"]["max_workers"] = int(mt_workers_var.get())
+                
                 # 确保 network 键存在
                 if "network" not in config:
                     config["network"] = {}
@@ -1280,6 +1411,41 @@ class ModelManagerGUI:
         except Exception as e:
             messagebox.showerror("错误", f"无法打开日志目录: {e}")
     
+    def update_results_display(self, results):
+        """更新结果显示标签页"""
+        try:
+            # 清空现有结果
+            for item in self.result_tree.get_children():
+                self.result_tree.delete(item)
+            
+            # 统计信息
+            processed_count = 0
+            failed_count = 0
+            missing_count = 0
+            
+            # 处理结果数据
+            for result in results:
+                if result.success:
+                    processed_count += 1
+                    # 添加缺失视频到列表
+                    if hasattr(result, 'missing_with_urls') and result.missing_with_urls:
+                        for title, url in result.missing_with_urls:
+                            self.result_tree.insert("", tk.END, values=(result.model_name, title, url))
+                            missing_count += 1
+                else:
+                    failed_count += 1
+            
+            # 更新统计信息
+            self.stats_vars["processed"].set(f"成功处理: {processed_count}")
+            self.stats_vars["failed"].set(f"处理失败: {failed_count}")
+            self.stats_vars["missing"].set(f"发现缺失: {missing_count}")
+            
+            # 切换到结果显示标签页
+            self.notebook.select(self.result_tab)
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"更新结果显示失败: {e}")
+    
     def export_results(self):
         """导出结果"""
         file_path = filedialog.asksaveasfilename(
@@ -1408,11 +1574,9 @@ class ModelManagerGUI:
     
     def open_browser_window(self):
         """打开独立的浏览器窗口"""
-        try:
-            from browser import BrowserWindow
-            browser = BrowserWindow(self.root)
-        except Exception as e:
-            messagebox.showerror("错误", f"打开浏览器窗口失败: {e}")
+        # 切换到浏览器/代理测试标签页
+        self.notebook.select(self.browser_proxy_tab)
+        messagebox.showinfo("提示", "已切换到浏览器/代理测试标签页")
 
 if __name__ == "__main__":
     root = tk.Tk()

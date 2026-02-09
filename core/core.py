@@ -664,8 +664,12 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         # 生成报告
         generate_reports(results, config, module_type, processed_count, error_count, logger)
         
+        # 返回结果供GUI使用
+        return results
+        
     except KeyboardInterrupt:
         logger.info("\n⚠ 用户中断程序执行")
+        return []
     except Exception as e:
         logger.critical(f"❌ 程序执行错误: {e}")
         logger.critical(f"详细错误信息:\n{traceback.format_exc()}")
