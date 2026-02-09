@@ -223,10 +223,28 @@ class ModelProcessor:
             cached_titles = self.smart_cache.get_cached_titles(model_name)
             new_videos = online_set - cached_titles
             
-            # 对比找出缺失视频
-            missing = new_videos - local_set
+            # 获取之前已下载的视频（从缓存中标记为downloaded的视频）
+            # 这样后续运行时，已下载的视频不会再出现在缺失列表中
+            downloaded_videos = set()
+            if self.smart_cache and self.smart_cache.enabled:
+                # 直接读取缓存数据中的missing_videos，筛选status='downloaded'的
+                cache_data = self.smart_cache.load(model_name)
+                missing_data = cache_data.get('missing_videos', {})
+                for title, info in missing_data.items():
+                    if info.get('status') == 'downloaded':
+                        downloaded_videos.add(title)
             
-            self.logger.info(f"[线程-{thread_id}] {model_name}: 在线 {len(online_set)} | 新视频 {len(new_videos)} | 本地 {len(local_set)} | 缺失 {len(missing)}")
+            # 合并本地视频和已下载视频
+            local_set_with_downloaded = local_set | downloaded_videos
+            
+            # 对比找出缺失视频（用所有在线视频对比，不只是新增的）
+            missing = online_set - local_set_with_downloaded
+            
+            # 记录原始本地数量和实际用于对比的数量
+            original_local_count = len(local_set)
+            effective_local_count = len(local_set_with_downloaded)
+            
+            self.logger.info(f"[线程-{thread_id}] {model_name}: 在线 {len(online_set)} | 新视频 {len(new_videos)} | 本地 {original_local_count} | 已下载{len(downloaded_videos)} | 有效本地 {effective_local_count} | 缺失 {len(missing)}")
             
             self._update_stats(True)
             
@@ -234,7 +252,7 @@ class ModelProcessor:
             result = ModelResult(
                 model_name=model_name,
                 success=True,
-                local_count=len(local_set),
+                local_count=effective_local_count,  # 使用有效的本地视频数量（包含已下载的）
                 online_count=len(online_set),
                 new_videos_count=len(new_videos),
                 missing_count=len(missing),
@@ -262,12 +280,17 @@ class ModelProcessor:
                 country_model_dir = os.path.join(self.countries_dir, country, model_name)
                 Path(country_model_dir).mkdir(parents=True, exist_ok=True)
                 
+                # 创建缺失视频目录
+                missing_dir = os.path.join(country_model_dir, "缺失")
+                Path(missing_dir).mkdir(exist_ok=True)
+                
                 country_model_report = os.path.join(
                     country_model_dir,
                     f"{model_name}_report_{datetime.now().strftime('%Y%m%d')}.txt"
                 )
                 
                 with threading.Lock():
+                    # 生成报告文件
                     with open(country_model_report, 'w', encoding='utf-8') as f:
                         f.write("=" * 60 + "\n")
                         f.write(f"模特: {model_name}\n")
@@ -290,6 +313,27 @@ class ModelProcessor:
                         else:
                             f.write("✅ 本地视频完整，无缺失\n")
                             f.write("\n" + "=" * 60 + "\n")
+                    
+                    # 如果有缺失视频，生成缺失视频链接文件
+                    if missing and missing_with_urls:
+                        missing_links_file = os.path.join(missing_dir, f"{model_name}_缺失链接_{datetime.now().strftime('%Y%m%d')}.txt")
+                        with open(missing_links_file, 'w', encoding='utf-8') as f:
+                            f.write(f"# {model_name} 缺失视频链接\n")
+                            f.write(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write(f"# 总数量: {len(missing_with_urls)}\n")
+                            f.write("# " + "=" * 58 + "\n\n")
+                            
+                            for i, (title, video_url) in enumerate(missing_with_urls, 1):
+                                f.write(f"{title}\n")
+                                if video_url:
+                                    f.write(f"{video_url}\n")
+                                f.write("\n")
+                        
+                        self.logger.info(f"[线程-{thread_id}] {model_name}: 📁 缺失链接已保存")
+                        
+                        # 更新智能缓存中的缺失视频列表（用于后续只更新）
+                        if self.smart_cache and self.smart_cache.enabled:
+                            self.smart_cache.update_missing_videos(model_name, missing_with_urls)
                 
                 self.logger.info(f"[线程-{thread_id}] {model_name}: 📁 报告已保存")
             

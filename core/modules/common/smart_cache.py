@@ -451,6 +451,81 @@ class SmartCache:
         data['metadata']['last_incremental_update'] = datetime.now().isoformat()
         
         self.save(model_name, data)
+    
+    def update_missing_videos(self, model_name: str, missing_videos: List[Tuple[str, str]]):
+        """
+        更新缺失视频列表（用于后续只更新还缺失的视频）
+        
+        Args:
+            model_name: 模特名称
+            missing_videos: 缺失视频列表 [(title, url), ...]
+        """
+        data = self.load(model_name)
+        
+        if 'missing_videos' not in data:
+            data['missing_videos'] = {}
+        
+        current_time = datetime.now().isoformat()
+        
+        for title, url in missing_videos:
+            data['missing_videos'][title] = {
+                'url': url,
+                'last_missing': current_time,
+                'status': 'missing'  # missing, downloaded
+            }
+        
+        # 更新元数据
+        if 'metadata' not in data:
+            data['metadata'] = {}
+        data['metadata']['last_missing_update'] = current_time
+        data['metadata']['missing_count'] = len(data['missing_videos'])
+        
+        self.save(model_name, data)
+        self.logger.info(f"已更新缺失视频列表: {model_name} ({len(missing_videos)} 个)")
+    
+    def get_missing_videos(self, model_name: str) -> List[Tuple[str, str]]:
+        """
+        获取当前缺失的视频列表（只返回状态为missing的视频）
+        
+        Args:
+            model_name: 模特名称
+            
+        Returns:
+            缺失视频列表 [(title, url), ...]
+        """
+        data = self.load(model_name)
+        missing_data = data.get('missing_videos', {})
+        
+        result = []
+        for title, info in missing_data.items():
+            if info.get('status') == 'missing':
+                result.append((title, info.get('url', '')))
+        
+        return result
+    
+    def mark_video_downloaded(self, model_name: str, title: str):
+        """
+        标记视频已下载（后续不再出现在缺失列表中）
+        
+        Args:
+            model_name: 模特名称
+            title: 视频标题
+        """
+        data = self.load(model_name)
+        missing_data = data.get('missing_videos', {})
+        
+        if title in missing_data:
+            missing_data[title]['status'] = 'downloaded'
+            missing_data[title]['downloaded_at'] = datetime.now().isoformat()
+            
+            # 更新缺失数量
+            missing_count = sum(1 for v in missing_data.values() if v.get('status') == 'missing')
+            if 'metadata' not in data:
+                data['metadata'] = {}
+            data['metadata']['missing_count'] = missing_count
+            
+            self.save(model_name, data)
+            self.logger.debug(f"已标记视频为已下载: {model_name} - {title}")
 
 
 # 便捷函数
