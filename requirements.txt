@@ -1,0 +1,38 @@
+# 核心依赖
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+PyYAML>=6.0.1
+lxml>=4.9.0
+
+# Selenium 浏览器自动化
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+
+# GUI 依赖
+# tkinter 是 Python 标准库，无需安装
+
+# 可选依赖 - 更强大的网页抓取工具
+# playwright>=1.40.0        # 现代浏览器自动化
+# DrissionPage>=4.0.0       # 国产浏览器自动化工具
+# undetected-chromedriver>=3.5.0  # 绕过反爬虫检测
+
+# 网络请求增强
+urllib3>=2.0.0
+certifi>=2023.0.0
+charset-normalizer>=3.0.0
+
+# SOCKS 代理支持
+PySocks>=1.7.1
+requests[socks]>=2.31.0
+
+# 数据处理
+python-dateutil>=2.8.0
+
+# 日志和调试
+colorama>=0.4.6
+
+# 可选：GUI 浏览器组件
+# tkinterweb>=3.18.0        # GUI 内置浏览器（可选）
+
+# 打包工具（开发时使用）
+# pyinstaller>=6.0.0

@@ -9,7 +9,147 @@ from urllib.parse import urljoin
 
 # --- PRONHUB特定功能 ---
 def fetch_with_requests_pronhub(url: str, logger, max_pages: int = -1, config: dict = None) -> Tuple[Set[str], Dict[str, str]]:
-    """PRONHUB专用的requests抓取，抓取视频标题和链接，支持翻页"""
+    """PRONHUB专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页"""
+    if config is None:
+        config = {}
+    
+    # 检查是否使用 Selenium
+    use_selenium = config.get('use_selenium', False)
+    scraper = config.get('scraper', 'selenium')
+    
+    if use_selenium or scraper == 'selenium':
+        try:
+            return fetch_with_selenium_pronhub(url, logger, max_pages, config)
+        except Exception as e:
+            logger.warning(f"  PRONHUB - Selenium 抓取失败，回退到 requests: {e}")
+            # 回退到 requests
+            return fetch_with_requests_only_pronhub(url, logger, max_pages, config)
+    else:
+        return fetch_with_requests_only_pronhub(url, logger, max_pages, config)
+
+
+def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: dict = None) -> Tuple[Set[str], Dict[str, str]]:
+    """使用 Selenium 抓取 PRONHUB 视频"""
+    try:
+        from ..common.selenium_helper import SeleniumHelper
+    except ImportError:
+        logger.error("  PRONHUB - Selenium 助手模块未找到")
+        raise
+    
+    all_titles = set()
+    title_to_url = {}
+    page_num = 1
+    
+    selenium = None
+    try:
+        # 创建 Selenium 助手
+        selenium = SeleniumHelper(config)
+        selenium.driver = selenium.setup_driver()
+        
+        logger.info("  PRONHUB - 使用 Selenium 模式抓取")
+        
+        while True:
+            # 构建分页URL
+            page_url = url
+            if page_num > 1:
+                if '?' in url:
+                    page_url = f"{url}&page={page_num}"
+                else:
+                    page_url = f"{url}?page={page_num}"
+            
+            logger.info(f"  PRONHUB - Selenium 抓取第 {page_num} 页: {page_url}")
+            
+            # 访问页面
+            if not selenium.get_page(page_url, wait_element='a.thumbnailTitle, .title, .video-title', wait_timeout=15):
+                logger.warning(f"  PRONHUB - Selenium 页面加载失败")
+                break
+            
+            # 随机延时
+            time.sleep(random.uniform(2.0, 4.0))
+            
+            # 获取页面源码
+            page_source = selenium.get_page_source()
+            soup = BeautifulSoup(page_source, 'html.parser')
+            
+            # 提取标题
+            page_titles = set()
+            
+            # 选择器1: PRONHUB特有的视频标题选择器
+            for elem in soup.select('a.thumbnailTitle'):
+                title = elem.get_text(strip=True)
+                if title and len(title) > 3:
+                    cleaned_title = clean_pronhub_title(title, config.get('filename_clean_patterns', []))
+                    page_titles.add(cleaned_title)
+                    video_url = elem.get('href')
+                    if video_url:
+                        if not video_url.startswith('http'):
+                            video_url = urljoin(url, video_url)
+                        title_to_url[cleaned_title] = video_url
+            
+            # 选择器2: 通用标题选择器
+            if not page_titles:
+                for elem in soup.select('.title, .video-title, h3.title'):
+                    title = elem.get_text(strip=True)
+                    if title and len(title) > 3:
+                        cleaned_title = clean_pronhub_title(title, config.get('filename_clean_patterns', []))
+                        page_titles.add(cleaned_title)
+                        link_elem = elem.find_parent('a')
+                        if link_elem:
+                            video_url = link_elem.get('href')
+                            if video_url:
+                                if not video_url.startswith('http'):
+                                    video_url = urljoin(url, video_url)
+                                title_to_url[cleaned_title] = video_url
+            
+            if page_titles:
+                prev_count = len(all_titles)
+                all_titles.update(page_titles)
+                new_titles = len(all_titles) - prev_count
+                
+                logger.info(f"  PRONHUB - Selenium 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
+                
+                if page_num == 1:
+                    sample = list(page_titles)[:5]
+                    for i, title in enumerate(sample, 1):
+                        logger.info(f"    样本{i}: {title[:80]}{'...' if len(title) > 80 else ''}")
+            else:
+                logger.warning(f"  PRONHUB - Selenium 第 {page_num} 页未找到视频标题")
+                if page_num > 1:
+                    break
+            
+            # 检查是否有下一页
+            next_buttons = soup.select('a.next, a[rel="next"], li.next a, .pagination_next, .orangeButton')
+            has_next = False
+            for button in next_buttons:
+                text = button.get_text(strip=True).lower()
+                if text in ['next', '>', '下一页']:
+                    has_next = True
+                    break
+            
+            if not has_next:
+                logger.info("  PRONHUB - Selenium 没有下一页，停止抓取")
+                break
+            
+            # 检查最大页数
+            if max_pages > 0 and page_num >= max_pages:
+                logger.info(f"  PRONHUB - Selenium 达到最大页数限制 {max_pages}，停止抓取")
+                break
+            
+            page_num += 1
+        
+    except Exception as e:
+        logger.error(f"  PRONHUB - Selenium 抓取失败: {e}")
+        raise
+    finally:
+        if selenium:
+            selenium.close()
+    
+    logger.info(f"  PRONHUB - Selenium 总共提取到 {len(all_titles)} 个视频标题")
+    return all_titles, title_to_url
+
+
+def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, config: dict = None) -> Tuple[Set[str], Dict[str, str]]:
+    """使用 requests 抓取 PRONHUB 视频（原始版本）"""
     if config is None:
         config = {}
     headers = {

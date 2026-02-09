@@ -51,160 +51,137 @@ class BrowserTab:
     
     def init_browser(self):
         """初始化浏览器组件"""
-        # 尝试使用tkinterweb库
-        try:
-            from tkinterweb import HtmlFrame
-            self.browser = HtmlFrame(self.browser_frame)
-            self.browser.pack(fill=tk.BOTH, expand=True)
-            # 加载配置，设置代理
-            self.setup_proxy()
-            # 检查代理是否支持
-            config = self.load_config()
-            proxy_config = config.get("network", {}).get("proxy", {})
-            
-            if proxy_config.get("enabled", False):
-                # 显示提示信息
-                messagebox.showinfo("提示", "当前版本的tkinterweb不支持代理设置，将使用系统浏览器打开以测试代理。")
-                # 直接使用系统浏览器
-                self.open_system_browser("https://www.google.com")
-            else:
-                # 没有启用代理，尝试使用内置浏览器
-                self.browser.load_website("https://www.google.com")
-            self.browser_available = True
-        except ImportError:
-            # 如果没有安装tkinterweb，显示一个简单的浏览器界面
-            self.browser_available = False
-            # 创建一个简单的文本框来显示代理信息
-            info_frame = ttk.Frame(self.browser_frame)
-            info_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-            
-            ttk.Label(info_frame, text="代理测试浏览器", font=("SimHei", 14, "bold")).pack(pady=10)
-            ttk.Label(info_frame, text="当前代理配置:", font=("SimHei", 12)).pack(pady=5, anchor=tk.W)
-            
-            # 加载配置，显示代理信息
-            config = self.load_config()
-            proxy_config = config.get("network", {}).get("proxy", {})
-            
-            proxy_info = f"启用: {proxy_config.get('enabled', False)}\n"
-            proxy_info += f"类型: {proxy_config.get('type', 'http')}\n"
-            proxy_info += f"主机: {proxy_config.get('host', '127.0.0.1')}\n"
-            proxy_info += f"端口: {proxy_config.get('port', '10808')}\n"
-            proxy_info += f"HTTP代理: {proxy_config.get('http', '')}\n"
-            proxy_info += f"HTTPS代理: {proxy_config.get('https', '')}\n"
-            
-            info_text = tk.Text(info_frame, width=80, height=15, wrap=tk.WORD)
-            info_text.pack(fill=tk.BOTH, expand=True, pady=10)
-            info_text.insert(tk.END, proxy_info)
-            info_text.config(state=tk.DISABLED)
-            
-            ttk.Label(info_frame, text="测试代理是否成功:", font=("SimHei", 12)).pack(pady=5, anchor=tk.W)
-            ttk.Label(info_frame, text="1. 确保v2rayN等代理工具已启动并连接", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
-            ttk.Label(info_frame, text="2. 在代理设置中配置正确的代理信息", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
-            ttk.Label(info_frame, text="3. 点击'测试代理连接'按钮测试连接", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
-            ttk.Label(info_frame, text="4. 如果测试成功，说明代理配置正确", font=("SimHei", 10)).pack(pady=2, anchor=tk.W)
+        # 创建一个功能更完整的代理测试界面
+        self.browser_available = False
+        
+        # 创建主框架
+        info_frame = ttk.Frame(self.browser_frame)
+        info_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # 标题
+        ttk.Label(info_frame, text="🌐 代理测试浏览器", font=("SimHei", 14, "bold")).pack(pady=10)
+        
+        # 代理配置显示区域
+        config_frame = ttk.LabelFrame(info_frame, text="当前代理配置", padding=10)
+        config_frame.pack(fill=tk.X, pady=10)
+        
+        # 加载并显示代理配置
+        config = self.load_config()
+        proxy_config = config.get("network", {}).get("proxy", {})
+        
+        # 配置信息网格
+        row = 0
+        configs = [
+            ("启用状态", "✅ 已启用" if proxy_config.get('enabled', False) else "❌ 未启用"),
+            ("代理类型", proxy_config.get('type', 'socks5').upper()),
+            ("主机地址", proxy_config.get('host', '127.0.0.1')),
+            ("端口号", proxy_config.get('port', '10808')),
+            ("HTTP代理", proxy_config.get('http', '未配置')),
+            ("HTTPS代理", proxy_config.get('https', '未配置'))
+        ]
+        
+        for label, value in configs:
+            ttk.Label(config_frame, text=f"{label}:", font=("SimHei", 10, "bold")).grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+            ttk.Label(config_frame, text=str(value), font=("SimHei", 10)).grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
+            row += 1
+        
+        # 测试结果显示区域
+        result_frame = ttk.LabelFrame(info_frame, text="测试结果", padding=10)
+        result_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        self.browser_result_text = tk.Text(result_frame, height=12, wrap=tk.WORD, font=("Consolas", 9))
+        self.browser_result_text.pack(fill=tk.BOTH, expand=True)
+        
+        # 添加滚动条
+        scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.browser_result_text.yview)
+        self.browser_result_text.configure(yscroll=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 使用说明
+        help_frame = ttk.LabelFrame(info_frame, text="💡 使用说明", padding=10)
+        help_frame.pack(fill=tk.X, pady=10)
+        
+        instructions = [
+            "1. 确保代理工具（如 v2rayN、Clash 等）已启动并连接成功",
+            "2. 在【工具】→【打开配置文件】中配置正确的代理信息",
+            "3. 点击上方【前往】按钮或【代理测试】标签页测试连接",
+            "4. 测试成功后即可开始使用抓取功能"
+        ]
+        
+        for inst in instructions:
+            ttk.Label(help_frame, text=inst, font=("SimHei", 9)).pack(anchor=tk.W, pady=2)
     
-    def setup_proxy(self):
-        """设置浏览器代理"""
-        try:
-            # 加载配置
-            config = self.load_config()
-            proxy_config = config.get("network", {}).get("proxy", {})
-            
-            print(f"代理配置: {proxy_config}")
-            
-            # 如果启用了代理
-            if proxy_config.get("enabled", False):
-                http_proxy = proxy_config.get("http", "")
-                https_proxy = proxy_config.get("https", "")
-                
-                print(f"HTTP代理: {http_proxy}")
-                print(f"HTTPS代理: {https_proxy}")
-                
-                if http_proxy:
-                    # 尝试设置tkinterweb的代理（不同版本的API可能不同）
-                    print(f"尝试设置代理: {http_proxy}")
-                    
-                    # 方法1: 直接设置代理属性
-                    if hasattr(self.browser, 'proxy'):
-                        self.browser.proxy = http_proxy
-                        print("使用属性设置代理成功")
-                    # 方法2: 使用set_proxy方法
-                    elif hasattr(self.browser, 'set_proxy'):
-                        try:
-                            self.browser.set_proxy(http_proxy)
-                            print("使用set_proxy方法设置代理成功")
-                        except Exception as e:
-                            print(f"set_proxy方法调用失败: {e}")
-                    # 方法3: 检查是否有其他代理相关属性
-                    elif hasattr(self.browser, '_proxy'):
-                        self.browser._proxy = http_proxy
-                        print("使用_proxy属性设置代理成功")
-                    # 方法4: 检查是否有network属性
-                    elif hasattr(self.browser, 'network'):
-                        try:
-                            self.browser.network.set_proxy(http_proxy)
-                            print("使用network.set_proxy设置代理成功")
-                        except Exception as e:
-                            print(f"network.set_proxy失败: {e}")
-                    else:
-                        print("tkinterweb不支持代理设置")
-                        # 显示提示信息
-                        messagebox.showinfo("提示", "当前版本的tkinterweb不支持代理设置，将使用系统默认网络连接。")
-        except Exception as e:
-            print(f"设置代理失败: {e}")
+
     
     def browser_go(self):
-        """浏览器前往指定地址"""
+        """浏览器前往指定地址（使用系统浏览器测试代理）"""
         url = self.url_var.get().strip()
         if url:
-            if self.browser_available:
+            try:
+                # 显示测试信息
+                self.browser_result_text.delete(1.0, tk.END)
+                self.browser_result_text.insert(tk.END, f"📡 正在测试访问: {url}\n\n")
+                
+                # 使用requests测试代理连接
+                config = self.load_config()
+                proxy_config = config.get("network", {}).get("proxy", {})
+                
+                proxies = {}
+                if proxy_config.get("enabled", False):
+                    http_proxy = proxy_config.get("http", "")
+                    https_proxy = proxy_config.get("https", "")
+                    if http_proxy:
+                        proxies["http"] = http_proxy
+                        proxies["https"] = https_proxy
+                    self.browser_result_text.insert(tk.END, f"✅ 使用代理: {http_proxy}\n\n")
+                else:
+                    self.browser_result_text.insert(tk.END, "⚠️  未启用代理，使用直接连接\n\n")
+                
+                self.browser_result_text.insert(tk.END, "⏳ 正在连接...\n")
+                self.browser_result_text.update()
+                
+                import requests
+                start_time = time.time()
+                response = requests.get(url, proxies=proxies, timeout=15, verify=False)
+                end_time = time.time()
+                
+                self.browser_result_text.insert(tk.END, f"\n✅ 连接成功!\n")
+                self.browser_result_text.insert(tk.END, f"   状态码: {response.status_code}\n")
+                self.browser_result_text.insert(tk.END, f"   响应时间: {end_time - start_time:.2f}秒\n")
+                self.browser_result_text.insert(tk.END, f"   内容长度: {len(response.content)}字节\n\n")
+                
+                # 尝试获取页面标题
                 try:
-                    # 重新设置代理，确保使用最新配置
-                    self.setup_proxy()
-                    print(f"尝试加载 URL: {url}")
-                    # 尝试加载网页
-                    start_time = time.time()
-                    self.browser.load_website(url)
-                    end_time = time.time()
-                    print(f"网页加载成功，耗时: {end_time - start_time:.2f}秒")
-                    
-                    # 检查是否加载成功
-                    try:
-                        page_title = self.browser.get_title()
-                        print(f"页面标题: {page_title}")
-                        if "Oops" in page_title or "Error" in page_title or "找不到页面" in page_title:
-                            print("页面加载失败，显示错误信息")
-                            # 尝试使用系统浏览器
-                            messagebox.showinfo("提示", "内置浏览器加载失败，尝试使用系统浏览器打开。")
-                            self.open_system_browser(url)
-                    except Exception as e:
-                        print(f"获取页面标题失败: {e}")
-                        
-                except Exception as e:
-                    print(f"加载网页失败: {e}")
-                    # 如果失败，显示提示信息
-                    messagebox.showinfo("提示", f"加载网页失败，尝试使用系统浏览器打开。\n错误: {e}")
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.content, "html.parser")
+                    title = soup.title.string if soup.title else "无标题"
+                    self.browser_result_text.insert(tk.END, f"📄 页面标题: {title}\n\n")
+                except:
+                    pass
+                
+                # 询问是否在系统浏览器中打开
+                if messagebox.askyesno("测试成功", f"代理连接测试成功！\n\n是否在系统浏览器中打开该网页？"):
                     self.open_system_browser(url)
-            else:
-                # 如果tkinterweb不可用，显示提示信息并使用系统浏览器
-                messagebox.showinfo("提示", "内置浏览器不可用，尝试使用系统浏览器打开。")
-                self.open_system_browser(url)
+                    
+            except Exception as e:
+                self.browser_result_text.delete(1.0, tk.END)
+                self.browser_result_text.insert(tk.END, f"❌ 连接失败!\n\n")
+                self.browser_result_text.insert(tk.END, f"错误信息: {str(e)}\n\n")
+                self.browser_result_text.insert(tk.END, "💡 请检查:\n")
+                self.browser_result_text.insert(tk.END, "   1. 代理工具是否已启动\n")
+                self.browser_result_text.insert(tk.END, "   2. 代理配置是否正确\n")
+                self.browser_result_text.insert(tk.END, "   3. 网络连接是否正常\n")
+                messagebox.showerror("连接失败", f"代理连接测试失败!\n\n{str(e)}")
     
     def browser_refresh(self):
         """浏览器刷新当前页面"""
-        if self.browser_available:
-            try:
-                self.browser.reload()
-            except Exception as e:
-                messagebox.showerror("错误", f"刷新页面失败: {e}")
+        # 重新测试当前URL
+        self.browser_go()
     
     def browser_back(self):
-        """浏览器返回上一页"""
-        if self.browser_available:
-            try:
-                self.browser.back()
-            except Exception as e:
-                messagebox.showerror("错误", f"返回上一页失败: {e}")
+        """浏览器返回（清空结果）"""
+        self.browser_result_text.delete(1.0, tk.END)
+        self.browser_result_text.insert(tk.END, "已清空测试结果\n")
     
     def open_system_browser(self, url=None):
         """使用系统默认浏览器打开网页"""

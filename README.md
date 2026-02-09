@@ -2,7 +2,7 @@
 
 一个用于管理和检查模特视频的工具，支持通过GUI界面管理模特信息并自动检查本地视频与在线视频的一致性，包括JAV模特的同步和识别功能。
 
-## 功能特点
+## ✨ 功能特点
 
 - ✅ **模特管理**：添加、编辑、删除模特信息
 - ✅ **自动查重**：检查本地视频与在线视频的一致性
@@ -11,44 +11,110 @@
 - ✅ **实时更新**：运行状态和日志实时显示
 - ✅ **导出功能**：导出查询结果和模特数据
 - ✅ **跨平台**：支持在不同Windows电脑上运行
-- ⏳ **JAV模特支持**：专门支持JAV模特的同步和识别（开发中）
-- ⏳ **智能识别**：自动识别和匹配JAV模特视频（开发中）
+- ✅ **JAV模特支持**：专门支持JAV模特的同步和识别
+- ✅ **智能识别**：自动识别和匹配JAV模特视频
 - ✅ **国家分类**：按国家分类管理模特和视频
 - ✅ **增强的文件名清理**：更智能的文件名清理和标准化
+- ✅ **Selenium支持**：浏览器自动化抓取，应对反爬虫
+- ✅ **代理支持**：完整的HTTP/SOCKS5代理配置
+- ✅ **错误处理**：自动重试和错误恢复机制
 
-## 项目结构
+## 🚀 快速开始
 
-```
-查重脚本/
-├── .gitignore          # Git忽略文件
-├── README.md           # 项目说明
-├── config.yaml         # 配置文件
-├── gui.py              # GUI界面
-├── models.json         # 模特数据
-└── core.py             # 核心脚本
-```
+### 方法一：下载可执行文件（推荐）
 
-## 安装说明
+1. 从 [Releases](../../releases) 下载 `模特查重管理系统.exe`
+2. 双击运行
+3. 首次运行会自动生成配置文件
 
-### 1. 安装Python
-
-确保你的电脑上安装了Python 3.8或更高版本。可以从 [Python官网](https://www.python.org/downloads/) 下载并安装。
-
-### 2. 安装依赖
-
-在项目目录中打开命令行，执行以下命令安装所需的依赖库：
+### 方法二：从源码运行
 
 ```bash
-pip install beautifulsoup4 requests selenium pyyaml
+# 1. 克隆项目
+git clone https://github.com/your-repo/Pornographic-Video-Content-Similarity-Detection.git
+cd Pornographic-Video-Content-Similarity-Detection
+
+# 2. 安装依赖
+pip install -r requirements.txt
+
+# 3. 运行测试
+python test_system.py
+
+# 4. 启动程序
+python gui/gui.py
 ```
 
-### 3. 配置Chrome浏览器
+**详细安装说明：** 查看 [INSTALL.md](INSTALL.md)  
+**快速启动指南：** 查看 [QUICKSTART.md](QUICKSTART.md)
 
-如果使用Selenium模式（默认启用），请确保你的电脑上安装了Chrome浏览器，并且Chrome版本与Selenium兼容。
+## 📋 系统要求
 
-## 配置文件
+- **Python**: 3.8 或更高版本
+- **Chrome**: 最新版本（使用 Selenium 时需要）
+- **操作系统**: Windows / Linux / macOS
+- **网络**: 稳定的网络连接（建议配置代理访问国外网站）
 
-### config.yaml
+## 🎯 主要更新（v1.1）
+
+### 🆕 新功能
+
+1. **Selenium 浏览器自动化**
+   - 应对反爬虫机制
+   - 自动下载和管理 ChromeDriver
+   - 支持无头模式和代理配置
+
+2. **增强的错误处理**
+   - 自动重试机制
+   - 错误分类和统计
+   - 详细的错误报告
+
+3. **改进的代理支持**
+   - HTTP 和 SOCKS5 代理
+   - 代理测试功能
+   - GUI 中的代理配置和测试
+
+4. **完整的测试套件**
+   - 系统健康检查
+   - 依赖验证
+   - 配置验证
+
+### 🔧 修复
+
+- ✅ 修复 GUI 浏览器模块的代理问题
+- ✅ 改进打包脚本，支持跨平台
+- ✅ 增强日志系统
+- ✅ 优化文件扫描性能
+
+## 📁 项目结构
+
+```
+Pornographic-Video-Content-Similarity-Detection/
+├── core/                          # 核心模块
+│   ├── core.py                   # 主程序入口
+│   └── modules/                  # 功能模块
+│       ├── common/               # 通用工具
+│       │   ├── common.py        # 配置、日志、缓存
+│       │   ├── selenium_helper.py  # Selenium 助手
+│       │   └── error_handler.py    # 错误处理
+│       ├── pronhub/             # PRONHUB 模块
+│       └── javdb/               # JAVDB 模块
+├── gui/                          # GUI 界面
+│   ├── gui.py                   # 主界面
+│   ├── browser.py               # 浏览器组件
+│   └── config_template.py       # 配置模板
+├── config.yaml                   # 配置文件
+├── models.json                   # 模特数据
+├── local_dirs.json              # 本地目录配置
+├── requirements.txt             # Python 依赖
+├── test_system.py              # 测试脚本
+├── 打包脚本.bat                 # Windows 打包
+├── build.sh                     # Linux/Mac 打包
+├── README.md                    # 本文件
+├── INSTALL.md                   # 详细安装指南
+└── QUICKSTART.md                # 快速启动指南
+```
+
+## 🔧 配置说明
 
 配置文件包含详细的系统设置，以下是主要配置项：
 
