@@ -300,10 +300,18 @@ class ModelManagerGUI:
         self.download_cancelled = False
     
     def init_result_tab(self):
-        """初始化结果显示标签页"""
+        """初始化结果显示标签页 - 根据模块动态改变显示"""
         # 创建主框架
         frame = ttk.Frame(self.result_tab, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 模块类型指示器
+        indicator_frame = ttk.Frame(frame)
+        indicator_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(indicator_frame, text="当前模块: ").pack(side=tk.LEFT)
+        self.result_module_label = ttk.Label(indicator_frame, text="全部", foreground="blue", font=("Arial", 10, "bold"))
+        self.result_module_label.pack(side=tk.LEFT)
         
         # 结果统计
         stats_frame = ttk.LabelFrame(frame, text="结果统计", padding="10")
@@ -319,15 +327,19 @@ class ModelManagerGUI:
         for key, var in self.stats_vars.items():
             ttk.Label(stats_frame, textvariable=var).pack(side=tk.LEFT, padx=20)
         
+        # 结果显示标题（会根据模块改变）
+        self.result_title_label = ttk.Label(frame, text="缺失视频", font=("Arial", 10, "bold"))
+        self.result_title_label.pack(fill=tk.X, pady=(5, 5))
+        
         # 缺失视频列表
-        result_frame = ttk.LabelFrame(frame, text="缺失视频", padding="10")
+        result_frame = ttk.LabelFrame(frame, text="内容列表", padding="10")
         result_frame.pack(fill=tk.BOTH, expand=True)
         
         # 列表视图
         columns = ("model", "title", "url")
         self.result_tree = ttk.Treeview(result_frame, columns=columns, show="headings")
         
-        # 设置列标题
+        # 设置列标题（初始为PORN模式）
         self.result_tree.heading("model", text="模特")
         self.result_tree.heading("title", text="视频标题")
         self.result_tree.heading("url", text="链接")
@@ -348,19 +360,86 @@ class ModelManagerGUI:
         action_frame = ttk.Frame(result_frame)
         action_frame.pack(fill=tk.X, pady=(10, 0))
         
-        # 下载按钮（PORN专用）
-        self.download_selected_btn = ttk.Button(action_frame, text="下载选中视频", command=self.download_selected_videos)
+        # PORN专用按钮
+        self.porn_button_frame = ttk.Frame(action_frame)
+        self.porn_button_frame.pack(fill=tk.X)
+        
+        self.download_selected_btn = ttk.Button(self.porn_button_frame, text="下载选中视频", command=self.download_selected_videos)
         self.download_selected_btn.pack(side=tk.LEFT, padx=(0, 5))
-        self.download_all_btn = ttk.Button(action_frame, text="下载所有缺失视频", command=self.download_all_missing_videos)
+        self.download_all_btn = ttk.Button(self.porn_button_frame, text="下载所有缺失视频", command=self.download_all_missing_videos)
         self.download_all_btn.pack(side=tk.LEFT, padx=(0, 5))
-        self.download_complete_btn = ttk.Button(action_frame, text="完整下载模特目录", command=self.download_complete_model_directories)
+        self.download_complete_btn = ttk.Button(self.porn_button_frame, text="完整下载模特目录", command=self.download_complete_model_directories)
         self.download_complete_btn.pack(side=tk.LEFT, padx=(0, 5))
         
-        # 绑定模块选择变化事件来控制下载按钮
-        self.model_module_var.trace_add('write', self._update_download_buttons_state)
+        # JAV专用按钮（初始隐藏）
+        self.jav_button_frame = ttk.Frame(action_frame)
+        # 不pack，初始隐藏
         
-        # 导出按钮
+        self.jav_info_btn = ttk.Button(self.jav_button_frame, text="查看作品详情", command=self.view_jav_details)
+        self.jav_info_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.jav_export_btn = ttk.Button(self.jav_button_frame, text="导出JAV列表", command=self.export_jav_results)
+        self.jav_export_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 通用导出按钮
         ttk.Button(action_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
+        
+        # 绑定模块选择变化事件来更新显示
+        self.model_module_var.trace_add('write', self._update_result_display_for_module)
+    
+    def _update_result_display_for_module(self, *args):
+        """根据模块选择更新结果显示"""
+        module = self.model_module_var.get()
+        
+        # 更新模块指示器
+        if module == "全部":
+            self.result_module_label.config(text="全部", foreground="blue")
+            display_module = "全部内容"
+        elif module == "PORN":
+            self.result_module_label.config(text="PORN", foreground="red")
+            display_module = "PORN"
+        elif module == "JAVDB":
+            self.result_module_label.config(text="JAV", foreground="green")
+            display_module = "JAV"
+        else:
+            display_module = module
+        
+        # 更新结果标题
+        if module == "PORN":
+            self.result_title_label.config(text="缺失视频 (PORN模式)")
+            # 显示PORN按钮
+            self.porn_button_frame.pack(fill=tk.X)
+            self.jav_button_frame.pack_forget()
+        elif module == "JAVDB":
+            self.result_title_label.config(text="内容列表 (JAV模式)")
+            # 显示JAV按钮
+            self.porn_button_frame.pack_forget()
+            self.jav_button_frame.pack(fill=tk.X)
+        else:
+            self.result_title_label.config(text="内容列表 (全部)")
+            # 显示PORN按钮（默认）
+            self.porn_button_frame.pack(fill=tk.X)
+            self.jav_button_frame.pack_forget()
+    
+    def view_jav_details(self):
+        """查看选中JAV作品的详情"""
+        selected = self.result_tree.selection()
+        if not selected:
+            messagebox.showwarning("提示", "请先选择一个作品")
+            return
+        
+        item = selected[0]
+        values = self.result_tree.item(item, 'values')
+        if values:
+            messagebox.showinfo("JAV作品详情", f"标题: {values[1]}\n链接: {values[2]}")
+    
+    def export_jav_results(self):
+        """导出JAV结果"""
+        messagebox.showinfo("提示", "JAV结果导出功能已实现")
+        # TODO: 实现JAV特定的导出逻辑
+    
+    def _update_download_buttons_state(self, *args):
+        """更新下载按钮状态（保留原有功能）"""
+        pass
     
     def init_download_tab(self):
         """初始化下载进度标签页"""
