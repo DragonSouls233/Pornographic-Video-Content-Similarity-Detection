@@ -48,24 +48,47 @@ class PornDownloader:
             }
         else:
             self.proxies = None
-            
+        
         # 输出目录
         self.output_dir = Path(self.config.get('output_dir', 'output'))
         
-        # 下载选项
+        # 改进的下载选项（基于最佳实践）
         self.download_options = {
-            'format': 'best[ext=mp4]/best',  # 优先选择mp4格式的最高分辨率
-            'outtmpl': '%(title)s_%(id)s.%(ext)s',  # 文件名模板
-            'restrictfilenames': True,  # 限制文件名中的特殊字符
-            'noplaylist': True,  # 不下载播放列表
-            'extractaudio': False,  # 不提取音频
-            'audioformat': 'best',
+            # 格式选择 - 优先最高分辨率MP4
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'preferredcodec': 'h264',
+            'preferredquality': '720',
+            
+            # 输出配置
+            'outtmpl': '%(title)s_%(id)s.%(ext)s',
+            'restrictfilenames': True,
+            
+            # 下载行为
+            'noplaylist': True,
+            'extractaudio': False,
+            'no_warnings': False,
+            'quiet': False,
+            
+            # 重试和超时（改进）
+            'socket_timeout': 30,
+            'retries': 5,  # 重试次数从默认增加到5
+            'fragment_retries': 5,
+            'skip_unavailable_fragments': True,
+            
+            # HTTP请求优化
+            'http_headers': {
+                'Referer': 'https://www.pornhub.com/',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            
+            # 进度回调
+            'progress_hooks': [self._progress_hook],
+            
+            # 其他选项
             'embedsubs': False,
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'ignoreerrors': True,  # 忽略错误继续下载
-            'no_warnings': False,
-            'progress_hooks': [self._progress_hook],  # 进度回调
+            'ignoreerrors': True,  # 忽略某些错误继续处理
         }
         
         # Cookie支持（用于会员内容）

@@ -35,6 +35,7 @@ echo "     完成!"
 echo ""
 
 echo "[3/5] 开始打包..."
+# 打包命令 - 支持V1/V3统一下载器
 pyinstaller --clean \
     --onefile \
     --noconsole \
@@ -43,6 +44,7 @@ pyinstaller --clean \
     --add-data "core:core" \
     --add-data "gui:gui" \
     --add-data "docs:docs" \
+    --exclude-module tests \
     gui/gui.py \
     --hidden-import yaml \
     --hidden-import requests \
@@ -61,10 +63,12 @@ pyinstaller --clean \
     --hidden-import yt_dlp \
     --hidden-import yt_dlp.YoutubeDL \
     --hidden-import urllib3 \
+    --hidden-import urllib.parse \
     --hidden-import certifi \
     --hidden-import PySocks \
     --hidden-import socks \
     --hidden-import socket \
+    --hidden-import hashlib \
     --hidden-import json \
     --hidden-import os \
     --hidden-import time \
@@ -89,6 +93,8 @@ pyinstaller --clean \
     --hidden-import core.modules.common \
     --hidden-import core.modules.porn \
     --hidden-import core.modules.porn.downloader \
+    --hidden-import core.modules.porn.downloader_v3_fixed \
+    --hidden-import core.modules.porn.unified_downloader \
     --hidden-import core.modules.porn.porn \
     --hidden-import core.modules.javdb \
     --hidden-import core.modules.javdb.scraper \
@@ -137,7 +143,7 @@ echo "提示:"
 echo "1. 首次运行会自动下载 ChromeDriver"
 echo "2. 确保安装了 Chrome 浏览器"
 echo "3. 配置文件会自动生成"
-echo "4. PORN模块支持视频下载功能"
+echo "4. PORN模块支持视频下载功能 (支V1-Standard和V3-Advanced两个版本)"
 echo "5. JAVDB模块专注于内容管理，无下载功能"
 echo "6. 支持porn和JAV分类目录配置"
 echo ""

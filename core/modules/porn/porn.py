@@ -96,34 +96,96 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
             page_titles = set()
             page_videos = []  # 用于智能缓存
             
-            # 选择器1: PORN特有的视频标题选择器
-            for elem in soup.select('a.thumbnailTitle'):
-                title = elem.get_text(strip=True)
-                if title and len(title) > 3:
-                    cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
-                    page_titles.add(cleaned_title)
-                    video_url = elem.get('href')
-                    if video_url:
-                        if not video_url.startswith('http'):
-                            video_url = urljoin(url, video_url)
-                        title_to_url[cleaned_title] = video_url
-                        page_videos.append((cleaned_title, video_url))
-            
-            # 选择器2: 通用标题选择器
-            if not page_titles:
-                for elem in soup.select('.title, .video-title, h3.title'):
-                    title = elem.get_text(strip=True)
-                    if title and len(title) > 3:
+            # 选择器1: 视频缩略图容器内的标题
+            # PornHub当前结构: div.videoContainer a.title 或 div.nf-video-hover-title
+            video_containers = soup.select('div.videoContainer, div.video, div.videoBrick, .nf-video-hover-title, a[href*="/view_video.php"]')
+            for container in video_containers:
+                # 从容器内查找标题
+                title_elem = container.select_one('a.title, span.title, a.nf-video-hover-title')
+                if not title_elem:
+                    title_elem = container.find('a')
+                
+                if title_elem:
+                    title = title_elem.get_text(strip=True)
+                    if title and len(title) > 3 and len(title) < 500:  # 过滤太长或太短的
+                        # 过滤掉明显是UI元素的文本
+                        if any(keyword in title.lower() for keyword in ['share', '分享', '收藏', 'report', '举报', '下载', 'download', '广告', 'advertisement']):
+                            continue
+                        
                         cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
-                        link_elem = elem.find_parent('a')
-                        if link_elem:
-                            video_url = link_elem.get('href')
-                            if video_url:
-                                if not video_url.startswith('http'):
-                                    video_url = urljoin(url, video_url)
-                                title_to_url[cleaned_title] = video_url
-                                page_videos.append((cleaned_title, video_url))
+                        
+                        # 从容器获取链接
+                        video_url = None
+                        if title_elem.name == 'a':
+                            video_url = title_elem.get('href')
+                        else:
+                            parent_a = title_elem.find_parent('a')
+                            if parent_a:
+                                video_url = parent_a.get('href')
+                        
+                        # 尝试从容器内的所有链接查找
+                        if not video_url:
+                            for link in container.find_all('a', href=True):
+                                href = link.get('href')
+                                if href and ('/view_video' in href or '/pornstar/' not in href):
+                                    video_url = href
+                                    break
+                        
+                        if video_url:
+                            if not video_url.startswith('http'):
+                                video_url = urljoin(url, video_url)
+                            title_to_url[cleaned_title] = video_url
+                            page_videos.append((cleaned_title, video_url))
+                        else:
+                            logger.debug(f"    注意: 找到了视频标题『{cleaned_title[:50]}...』但没有链接")
+            
+            # 选择器2: PORN特有的视频标题选择器（备选）
+            if not page_titles:
+                for elem in soup.select('a.thumbnailTitle'):
+                    title = elem.get_text(strip=True)
+                    if title and len(title) > 3 and len(title) < 500:
+                        cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
+                        page_titles.add(cleaned_title)
+                        video_url = elem.get('href')
+                        if not video_url:
+                            parent_a = elem.find_parent('a')
+                            if parent_a:
+                                video_url = parent_a.get('href')
+                        
+                        if video_url:
+                            if not video_url.startswith('http'):
+                                video_url = urljoin(url, video_url)
+                            title_to_url[cleaned_title] = video_url
+                            page_videos.append((cleaned_title, video_url))
+                        else:
+                            logger.debug(f"    注意: 找到了标题『{cleaned_title[:50]}...』但没有链接")
+            
+            # 选择器3: 通用标题选择器（仅当前两个选择器都没找到结果时）
+            if not page_titles:
+                # 更严格的选择器，只从已知的视频区域查找
+                video_area = soup.find('div', class_=['videoPlaylist', 'videoPagination', 'nf-video-list', 'container'])
+                if video_area:
+                    for elem in video_area.select('a.title, a[href*="view_video"], span.title'):
+                        title = elem.get_text(strip=True)
+                        if title and len(title) > 3 and len(title) < 500:
+                            # 再次过滤非视频标题
+                            if any(keyword in title.lower() for keyword in ['share', '分享', '收藏', 'report', '举报', '下载']):
+                                continue
+                            
+                            cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
+                            page_titles.add(cleaned_title)
+                            
+                            link_elem = elem if elem.name == 'a' else elem.find_parent('a')
+                            if link_elem:
+                                video_url = link_elem.get('href')
+                                if video_url:
+                                    if not video_url.startswith('http'):
+                                        video_url = urljoin(url, video_url)
+                                    title_to_url[cleaned_title] = video_url
+                                    page_videos.append((cleaned_title, video_url))
+                            else:
+                                logger.debug(f"    注意: 找到了标题『{cleaned_title[:50]}...』但未找到链接父元素")
             
             if page_titles:
                 prev_count = len(all_titles)
@@ -305,14 +367,24 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                         # 对在线标题应用清理流程
                         cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
+                        # 尝试提取链接 - 先从当前元素，改失败再向上查找
                         video_url = elem.get('href')
+                        if not video_url:
+                            # 如果当前元素没有href，尝试查找父上a标签
+                            parent_a = elem.find_parent('a')
+                            if parent_a:
+                                video_url = parent_a.get('href')
+                        
                         if video_url:
                             if not video_url.startswith('http'):
                                 video_url = urljoin(url, video_url)
                             title_to_url[cleaned_title] = video_url
                             page_videos.append((cleaned_title, video_url))
+                        else:
+                            # 即使没有链接，也要樸保标题存在
+                            logger.debug(f"    注意: 找到了标题『{cleaned_title[:50]}...』但没有链接")
                 
-                # 选择器2: 通用标题选择器
+                # 选择器2: 通用标题选择器（仅当第一个选择器没找到结果时）
                 if not page_titles:
                     for elem in soup.select('.title, .video-title, h3.title'):
                         title = elem.get_text(strip=True)
@@ -328,6 +400,8 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                                         video_url = urljoin(url, video_url)
                                     title_to_url[cleaned_title] = video_url
                                     page_videos.append((cleaned_title, video_url))
+                            else:
+                                logger.debug(f"    注意: 找到了标题『{cleaned_title[:50]}...』但未找到链接父不素")
                 
                 if page_titles:
                     prev_count = len(all_titles)

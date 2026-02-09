@@ -282,64 +282,6 @@ class ModelManagerGUI:
         self.status_var = tk.StringVar(value="就绪")
         ttk.Label(scan_progress_frame, textvariable=self.status_var, font=("SimHei", 10)).pack(anchor=tk.W, pady=2)
         
-        # 下载进度区域
-        download_progress_frame = ttk.LabelFrame(progress_container, text="下载进度", padding="10")
-        download_progress_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
-        
-        # 下载详细信息框架
-        download_info_frame = ttk.Frame(download_progress_frame)
-        download_info_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        # 下载速度和状态
-        speed_status_frame = ttk.Frame(download_info_frame)
-        speed_status_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        ttk.Label(speed_status_frame, text="下载速度:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
-        self.download_speed_var = tk.StringVar(value="0 KB/s")
-        ttk.Label(speed_status_frame, textvariable=self.download_speed_var, font=("SimHei", 9)).pack(side=tk.LEFT)
-        
-        ttk.Label(speed_status_frame, text="当前文件:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(20, 10))
-        self.current_file_var = tk.StringVar(value="无")
-        ttk.Label(speed_status_frame, textvariable=self.current_file_var, font=("SimHei", 9)).pack(side=tk.LEFT)
-        
-        # 下载进度条和统计
-        download_stats_frame = ttk.Frame(download_info_frame)
-        download_stats_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        ttk.Label(download_stats_frame, text="下载进度:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
-        self.download_progress_var = tk.DoubleVar(value=0)
-        self.download_progress_bar = ttk.Progressbar(download_stats_frame, variable=self.download_progress_var, maximum=100, length=200)
-        self.download_progress_bar.pack(side=tk.LEFT, padx=(5, 10))
-        
-        self.download_percentage_var = tk.StringVar(value="0%")
-        ttk.Label(download_stats_frame, textvariable=self.download_percentage_var, font=("SimHei", 9, "bold")).pack(side=tk.LEFT)
-        
-        # 下载统计信息
-        download_count_frame = ttk.Frame(download_info_frame)
-        download_count_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        ttk.Label(download_count_frame, text="已下载:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
-        self.downloaded_count_var = tk.StringVar(value="0")
-        ttk.Label(download_count_frame, textvariable=self.downloaded_count_var, font=("SimHei", 9)).pack(side=tk.LEFT)
-        
-        ttk.Label(download_count_frame, text="总大小:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(20, 10))
-        self.total_size_var = tk.StringVar(value="0 MB")
-        ttk.Label(download_count_frame, textvariable=self.total_size_var, font=("SimHei", 9)).pack(side=tk.LEFT)
-        
-        # 下载日志区域
-        download_log_frame = ttk.Frame(download_progress_frame)
-        download_log_frame.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(download_log_frame, text="下载日志:", font=("SimHei", 9, "bold")).pack(anchor=tk.W, pady=(0, 5))
-        
-        self.download_log_text = tk.Text(download_log_frame, height=8, wrap=tk.WORD, font=("Consolas", 9))
-        self.download_log_text.pack(fill=tk.BOTH, expand=True)
-        
-        # 下载日志滚动条
-        download_scrollbar = ttk.Scrollbar(download_log_frame, orient=tk.VERTICAL, command=self.download_log_text.yview)
-        self.download_log_text.configure(yscroll=download_scrollbar.set)
-        download_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
         # 查重日志显示
         log_frame = ttk.LabelFrame(progress_container, text="查重日志", padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
@@ -425,13 +367,57 @@ class ModelManagerGUI:
         main_frame = ttk.Frame(self.download_tab, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 上半部 - 进度显示
+        # 上半部 - 下载控制面板
+        control_frame = ttk.LabelFrame(main_frame, text="下载控制", padding="10")
+        control_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # 第一行：版本选择
+        ttk.Label(control_frame, text="下载版本:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.download_version_var = tk.StringVar(value="auto")
+        version_frame = ttk.Frame(control_frame)
+        version_frame.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        ttk.Radiobutton(version_frame, text="自动", variable=self.download_version_var, value="auto").pack(side=tk.LEFT, padx=3)
+        ttk.Radiobutton(version_frame, text="V1-Standard", variable=self.download_version_var, value="v1").pack(side=tk.LEFT, padx=3)
+        ttk.Radiobutton(version_frame, text="V3-Advanced", variable=self.download_version_var, value="v3").pack(side=tk.LEFT, padx=3)
+        
+        # 第二行：下载模式选择
+        ttk.Label(control_frame, text="下载模式:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.download_mode_var = tk.StringVar(value="single")
+        mode_frame = ttk.Frame(control_frame)
+        mode_frame.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        ttk.Radiobutton(mode_frame, text="单视频", variable=self.download_mode_var, value="single").pack(side=tk.LEFT, padx=3)
+        ttk.Radiobutton(mode_frame, text="模特目录", variable=self.download_mode_var, value="model").pack(side=tk.LEFT, padx=3)
+        
+        # 第三行：URL/模特页面输入
+        ttk.Label(control_frame, text="URL/模特:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.download_url_var = tk.StringVar(value="")
+        url_entry = ttk.Entry(control_frame, textvariable=self.download_url_var, width=60)
+        url_entry.grid(row=2, column=1, sticky=tk.EW, padx=5, pady=5)
+        
+        # 第四行：保存目录选择
+        ttk.Label(control_frame, text="保存目录:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        dir_frame = ttk.Frame(control_frame)
+        dir_frame.grid(row=3, column=1, sticky=tk.EW, padx=5, pady=5)
+        self.download_dir_var = tk.StringVar(value="downloads")
+        dir_entry = ttk.Entry(dir_frame, textvariable=self.download_dir_var, width=50)
+        dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        ttk.Button(dir_frame, text="浏览", command=self.browse_download_dir, width=8).pack(side=tk.LEFT)
+        
+        # 第五行：操作按钮
+        button_frame = ttk.Frame(control_frame)
+        button_frame.grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Button(button_frame, text="开始下载", command=self.start_download, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消下载", command=self.cancel_download, width=12).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="清空日志", command=self.clear_download_log, width=12).pack(side=tk.LEFT, padx=5)
+        
+        # 中间部 - 进度显示
         progress_frame = ttk.LabelFrame(main_frame, text="下载进度", padding="10")
         progress_frame.pack(fill=tk.X, pady=(0, 10))
         
         # 当前文件信息
         ttk.Label(progress_frame, text="当前文件:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.download_file_var = tk.StringVar(value="正常槈")
+        self.download_file_var = tk.StringVar(value="等待中...")
         ttk.Label(progress_frame, textvariable=self.download_file_var, foreground="blue").grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
         
         # 下载速度
@@ -470,6 +456,10 @@ class ModelManagerGUI:
         self.download_log_text_tab = tk.Text(log_frame, height=20, wrap=tk.WORD, yscrollcommand=scrollbar.set, font=("Consolas", 9))
         self.download_log_text_tab.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.download_log_text_tab.yview)
+        
+        # 下载线程
+        self.download_thread = None
+        self.download_stop_flag = False
     
     def init_browser_proxy_tab(self):
         """初始化浏览器/代理测试标签页（合并）"""
@@ -712,6 +702,149 @@ class ModelManagerGUI:
                 return f"socks5://{host}:{port}"
             else:
                 return f"http://{host}:{port}"
+    
+    # ==================== 下载控制方法 ====================
+    
+    def browse_download_dir(self):
+        """浏览下载目录"""
+        dir_path = filedialog.askdirectory(title="选择下载目录")
+        if dir_path:
+            self.download_dir_var.set(dir_path)
+    
+    def log_download_message(self, message: str, level: str = "INFO"):
+        """添加下载日志消息"""
+        self.download_log_text_tab.insert(tk.END, f"[{level}] {message}\n")
+        self.download_log_text_tab.see(tk.END)  # 自动滚动到底部
+        self.root.update()
+    
+    def clear_download_log(self):
+        """清空下载日志"""
+        self.download_log_text_tab.delete(1.0, tk.END)
+    
+    def start_download(self):
+        """开始下载"""
+        url = self.download_url_var.get().strip()
+        if not url:
+            messagebox.showwarning("提示", "请输入URL或模特页面地址")
+            return
+        
+        # 禁用下载按钮，启用取消按钮
+        self.download_stop_flag = False
+        
+        # 在后台线程执行下载
+        self.download_thread = threading.Thread(
+            target=self._download_worker,
+            args=(url,),
+            daemon=True
+        )
+        self.download_thread.start()
+    
+    def cancel_download(self):
+        """取消下载"""
+        self.download_stop_flag = True
+        self.log_download_message("正在取消下载...", "WARN")
+    
+    def _download_worker(self, url: str):
+        """下载工作线程"""
+        try:
+            from core.modules.porn import UnifiedDownloader
+            
+            # 获取配置
+            config = self.load_config()
+            
+            # 创建统一下载器
+            version = self.download_version_var.get()
+            mode = self.download_mode_var.get()
+            save_dir = self.download_dir_var.get()
+            
+            self.log_download_message(f"\n========== 新下载任务 ==========", "INFO")
+            self.log_download_message(f"版本: {version}", "INFO")
+            self.log_download_message(f"模式: {mode}", "INFO")
+            self.log_download_message(f"保存目录: {save_dir}", "INFO")
+            self.log_download_message(f"URL: {url}", "INFO")
+            self.log_download_message("开始下载...", "INFO")
+            
+            # 创建下载器
+            downloader = UnifiedDownloader(
+                config=config,
+                version=version,
+                enable_fallback=config.get("download", {}).get("enable_fallback", True),
+                progress_callback=self._download_progress_callback
+            )
+            
+            # 执行下载
+            if mode == "single":
+                # 单视频下载
+                result = downloader.download_video(url, save_dir)
+                self._handle_download_result(result)
+            elif mode == "model":
+                # 模特目录下载
+                result = downloader.download_model_videos(
+                    model_url=url,
+                    model_name="Model",
+                    base_save_dir=save_dir
+                )
+                self._handle_download_result(result)
+        
+        except Exception as e:
+            self.log_download_message(f"错误: {str(e)}", "ERROR")
+            logger.error(f"下载异常: {e}", exc_info=True)
+    
+    def _download_progress_callback(self, info: Dict):
+        """下载进度回调"""
+        if self.download_stop_flag:
+            return
+        
+        try:
+            # 更新进度信息
+            if "status" in info:
+                status = info.get("status")
+                if status == "downloading":
+                    downloaded = info.get("downloaded_bytes", 0)
+                    total = info.get("total_bytes", 0) or info.get("total_bytes_estimate", 0)
+                    speed = info.get("speed", 0)
+                    
+                    # 更新进度条
+                    if total > 0:
+                        progress = (downloaded / total) * 100
+                        self.download_progress_var_tab.set(progress)
+                        self.download_percentage_var_tab.set(f"{progress:.1f}%")
+                    
+                    # 更新速度
+                    if speed:
+                        speed_mb = speed / (1024 * 1024)
+                        self.download_speed_var_tab.set(f"{speed_mb:.2f} MB/s")
+                    
+                    # 更新数据量
+                    downloaded_mb = downloaded / (1024 * 1024)
+                    total_mb = total / (1024 * 1024) if total > 0 else 0
+                    self.download_size_var_tab.set(f"{downloaded_mb:.2f} MB / {total_mb:.2f} MB")
+                    
+                    # 添加日志
+                    version = info.get("_version", "Unknown")
+                    filename = info.get("filename", "Unknown")
+                    self.download_file_var.set(f"{filename} ({version})")
+                    
+                elif status == "finished":
+                    self.log_download_message("✅ 下载完成", "INFO")
+        
+        except Exception as e:
+            self.log_download_message(f"进度回调错误: {e}", "ERROR")
+    
+    def _handle_download_result(self, result: Dict):
+        """处理下载结果"""
+        if result.get("success"):
+            self.log_download_message(f"✅ 成功: {result.get('message', '下载完成')}", "INFO")
+            self.log_download_message(f"文件路径: {result.get('file_path')}", "INFO")
+            messagebox.showinfo("下载完成", f"文件已保存: {result.get('file_path')}")
+        else:
+            error_msg = result.get("message") or result.get("error") or "未知错误"
+            self.log_download_message(f"❌ 失败: {error_msg}", "ERROR")
+            messagebox.showerror("下载失败", error_msg)
+        
+        self.log_download_message("========== 下载任务完成 ==========\n", "INFO")
+    
+    # ==================== 配置管理方法 ====================
     
     def load_config(self):
         """加载配置文件"""
@@ -2578,11 +2711,7 @@ class ModelManagerGUI:
             timestamp = time.strftime("%H:%M:%S")
             log_msg = f"[{timestamp}] {message}\n"
             
-            # 同时书写到旧的日志框（如果存在）和新的标签页日志框
-            if hasattr(self, 'download_log_text') and self.download_log_text.winfo_exists():
-                self.download_log_text.insert(tk.END, log_msg)
-                self.download_log_text.see(tk.END)
-            
+            # 写入下载进度标签页中的日志框
             if hasattr(self, 'download_log_text_tab') and self.download_log_text_tab.winfo_exists():
                 self.download_log_text_tab.insert(tk.END, log_msg)
                 self.download_log_text_tab.see(tk.END)

@@ -263,3 +263,42 @@ porn:
     timeout: 300
   # 缺失日志模板类型 ("simple" | "detailed")
   missing_log_template: "simple"
+
+# 下载器配置（V1/V3统一调度）
+download:
+  # 默认版本策略：v1（yt-dlp稳定版）/ v3（Selenium+CDP版）/ auto（自动选择）
+  default_version: "auto"
+  
+  # 是否启用自动降级（V1失败时自动切换到V3）
+  enable_fallback: true
+  
+  # 下载超时时间（秒）
+  timeout: 300
+  
+  # 重试次数
+  retry_count: 3
+  
+  # 每个视频重试间隔（秒）
+  retry_delay: 5
+  
+  # 并发下载线程数
+  max_workers: 4
+  
+  # 默认输出目录
+  output_dir: "downloads"
+  
+  # V1特定配置
+  v1:
+    # 是否启用会员cookies支持
+    enable_cookies: false
+    # cookies文件路径
+    cookies_file: ""
+    # 优先分辨率
+    preferred_quality: "best"
+  
+  # V3特定配置  
+  v3:
+    # 是否启用Selenium无头模式
+    headless: true
+    # 页面加载超时（秒）
+    page_load_timeout: 30
