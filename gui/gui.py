@@ -904,10 +904,12 @@ class ModelManagerGUI:
                     total_mb = total / (1024 * 1024) if total > 0 else 0
                     self.download_size_var_tab.set(f"{downloaded_mb:.2f} MB / {total_mb:.2f} MB")
                     
-                    # 添加日志
+                    # 添加日志 - PRON标准格式显示
                     version = info.get("_version", "Unknown")
                     filename = info.get("filename", "Unknown")
-                    self.download_file_var.set(f"{filename} ({version})")
+                    # 提取实际文件名（去除路径）
+                    actual_filename = os.path.basename(filename) if filename else "Unknown"
+                    self.download_file_var.set(f"{actual_filename} ({version})")
                     
                 elif status == "finished":
                     self.log_download_message("✅ 下载完成", "INFO")

@@ -59,9 +59,10 @@ class PornDownloader:
             'preferredcodec': 'h264',
             'preferredquality': '720',
             
-            # 输出配置
-            'outtmpl': '%(title)s_%(id)s.%(ext)s',
-            'restrictfilenames': True,
+            # 输出配置 - PRON标准命名格式
+            'outtmpl': '[Channel] %(uploader)s/%(title)s.%(ext)s',
+            'restrictfilenames': False,
+            'windowsfilenames': True,
             
             # 下载行为
             'noplaylist': True,
@@ -118,29 +119,45 @@ class PornDownloader:
                 logger.error(f"执行进度回调失败: {e}")
     
     def _clean_title(self, title: str) -> str:
-        """清理视频标题"""
+        """清理视频标题 - PRON标准清理规则"""
         if not title:
-            return "unknown_title"
+            return "Unknown_Title"
             
-        # 移除特殊字符，但保留中文、英文、数字和基本符号
+        # PRON标准清理规则
+        # 1. 移除危险字符
         title = re.sub(r'[<>:"/\\|?*]', '', title)
+        
+        # 2. 移除常见的平台标识和质量标记
+        title = re.sub(r'\b(HD|FHD|UHD|4K|1080p|720p|480p)\b', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'\b(WEB-DL|WEBRip|BluRay|DVD|HDRip)\b', '', title, flags=re.IGNORECASE)
+        
+        # 3. 移除多余的空格和分隔符
+        title = re.sub(r'[\s_\-\.]+', ' ', title)
+        title = title.strip()
+        
+        # 4. 移除方括号和圆括号内容（通常是平台或分组信息）
+        title = re.sub(r'\[[^\]]*\]', '', title)
+        title = re.sub(r'\([^\)]*\)', '', title)
+        
+        # 5. 再次清理多余空格
         title = re.sub(r'\s+', ' ', title).strip()
         
-        # 限制长度
-        if len(title) > 200:
-            title = title[:200]
+        # 6. 限制长度（Windows文件名限制）
+        if len(title) > 150:
+            title = title[:150]
             
-        return title or "unknown_title"
+        # 7. 确保不是空字符串
+        return title or "Unknown_Title"
     
     def _get_model_dir(self, model_name: str) -> Path:
-        """获取模特目录路径"""
+        """获取模特目录路径 - PRON标准格式"""
         if not model_name:
             model_name = "Unknown_Model"
             
         # 清理模特名
         model_name = self._clean_title(model_name)
         
-        # 创建模特目录：[Channel] 模特名
+        # PRON标准目录结构：output/[Channel] 模特名/
         model_dir = self.output_dir / f"[Channel] {model_name}"
         ensure_dir_exists(model_dir)
         
@@ -215,7 +232,8 @@ class PornDownloader:
         
         # 配置yt-dlp选项
         ydl_opts = self.download_options.copy()
-        ydl_opts['outtmpl'] = str(save_path / '%(title)s_%(id)s.%(ext)s')
+        # 使用PRON标准命名格式：[Channel] 模特名/视频标题.扩展名
+        ydl_opts['outtmpl'] = str(save_path / '%(title)s.%(ext)s')
         
         # 配置代理
         if self.proxies:
@@ -239,11 +257,11 @@ class PornDownloader:
                 # 获取视频信息（不下载）
                 info = ydl.extract_info(url, download=False)
                 
-                # 格式化文件名
+                # 格式化文件名 - PRON标准格式
                 safe_title = self._clean_title(info.get('title', title))
-                video_id = info.get('id', 'unknown')
                 ext = info.get('ext', 'mp4')
-                filename = f"{safe_title}_{video_id}.{ext}"
+                # PRON标准命名：直接使用标题，不添加ID
+                filename = f"{safe_title}.{ext}"
                 file_path = save_path / filename
                 
                 # 检查文件是否已存在

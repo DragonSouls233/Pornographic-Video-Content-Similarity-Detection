@@ -277,12 +277,12 @@ class PornHubDownloaderV3Fixed:
             match = re.search(r'<h1[^>]*>([^<]+)</h1>', html)
             if match:
                 return match.group(1).strip()
-            
+                
             # 方式2: meta标签
-            match = re.search(r'<meta\s+name=["\']og:title["\']\s+content=["\']([^"\']+)["\']', html)
+            match = re.search(r'<meta\s+name=["\']og:title["\']\s+content=["\']([^"\']+)""]', html)
             if match:
                 return match.group(1).strip()
-            
+                
             # 方式3: title标签
             match = re.search(r'<title[^>]*>([^<]+)</title>', html)
             if match:
@@ -291,11 +291,71 @@ class PornHubDownloaderV3Fixed:
                 if ' - ' in title:
                     title = title.split(' - ')[0]
                 return title
-        
+            
         except Exception as e:
             logger.warning(f"提取标题失败: {e}")
-        
+            
         return None
+        
+    def _extract_model_name(self, video_id: str, html: Optional[str] = None) -> str:
+        """提取模特名称 - PRON标准"""
+        try:
+            if html:
+                soup = BeautifulSoup(html, 'html.parser')
+                    
+                # 尝试多种模特名位置
+                model_elem = soup.find('div', class_='userInfo')
+                if model_elem:
+                    model_elem = model_elem.find('div', class_='usernameWrap')
+                    if model_elem:
+                        model_name = model_elem.get_text().strip()
+                        if model_name:
+                            return model_name
+                    
+                # 备选位置
+                model_elem = soup.find('div', class_='usernameWrap')
+                if model_elem:
+                    model_name = model_elem.get_text().strip()
+                    if model_name:
+                        return model_name
+                
+            # 如果无法提取，使用默认名称
+            return "Unknown_Model"
+                
+        except Exception as e:
+            logger.warning(f"提取模特名失败: {e}")
+            return "Unknown_Model"
+        
+    def _clean_title(self, title: str) -> str:
+        """清理视频标题 - PRON标准清理规则"""
+        if not title:
+            return "Unknown_Title"
+                
+        # PRON标准清理规则
+        # 1. 移除危险字符
+        title = re.sub(r'[<>:"/\\|?*]', '', title)
+            
+        # 2. 移除常见的平台标识和质量标记
+        title = re.sub(r'\b(HD|FHD|UHD|4K|1080p|720p|480p)\b', '', title, flags=re.IGNORECASE)
+        title = re.sub(r'\b(WEB-DL|WEBRip|BluRay|DVD|HDRip)\b', '', title, flags=re.IGNORECASE)
+            
+        # 3. 移除多余的空格和分隔符
+        title = re.sub(r'[\s_\-\.]+', ' ', title)
+        title = title.strip()
+            
+        # 4. 移除方括号和圆括号内容（通常是平台或分组信息）
+        title = re.sub(r'\[[^\]]*\]', '', title)
+        title = re.sub(r'\([^\)]*\)', '', title)
+            
+        # 5. 再次清理多余空格
+        title = re.sub(r'\s+', ' ', title).strip()
+            
+        # 6. 限制长度（Windows文件名限制）
+        if len(title) > 150:
+            title = title[:150]
+                
+        # 7. 确保不是空字符串
+        return title or "Unknown_Title"
     
     def _download_m3u8(self, m3u8_url: str, file_path: Path) -> bool:
         """下载M3U8流媒体"""
@@ -417,17 +477,22 @@ class PornHubDownloaderV3Fixed:
             
             logger.info(f"✅ M3U8 URL: {m3u8_url[:100]}")
             
-            # 计算保存路径
+            # 计算保存路径 - PRON标准目录结构
             if save_dir:
                 save_path = Path(save_dir)
             else:
-                save_path = self.output_dir / "downloads"
+                # 提取模特名创建标准目录结构
+                model_name = self._extract_model_name(video_id, html if 'html' in locals() else None)
+                safe_model_name = self._clean_title(model_name)
+                save_path = self.output_dir / f"[Channel] {safe_model_name}"
             
             ensure_dir_exists(save_path)
             
-            # 生成文件名
-            # 假设不能提取标题，使用ID作文件名
-            safe_title = f"video_{video_id}"
+            # 生成文件名 - PRON标准命名
+            title = self._extract_title(html) if 'html' in locals() else None
+            if not title:
+                title = f"Video_{video_id}"
+            safe_title = self._clean_title(title)
             file_path = save_path / f"{safe_title}.mp4"
             
             # 检查文件是否已存在

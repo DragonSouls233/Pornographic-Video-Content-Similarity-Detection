@@ -130,9 +130,17 @@ local_scan:
 # === 文件名清理 ===
 filename_cleaning:
   enabled: true                  # 是否启用文件名清理
+  # PRON标准清理规则
   clean_patterns:                # 自定义清理规则（会与默认规则合并）
-    - "^\\[Sample\\]\\s*"        # 示例：移除开头的[Sample]标记
+    - "^\\[Sample\\]\\s*"        # 移除开头的[Sample]标记
+    - "\\b(HD|FHD|UHD|4K|1080p|720p|480p)\\b"  # 移除质量标记
+    - "\\b(WEB-DL|WEBRip|BluRay|DVD|HDRip)\\b"  # 移除来源标记
+    - "\\[[^\\]]*\\]"           # 移除方括号内容
+    - "\\([^\\)]*\\)"          # 移除圆括号内容
   clean_order:                   # 清理规则的应用顺序
+    - "dangerous_chars"          # 危险字符
+    - "quality_tags"             # 质量标记
+    - "source_tags"              # 来源标记
     - "brackets"                 # 方括号内容
     - "parentheses"              # 圆括号内容
     - "resolution"               # 分辨率信息
@@ -141,10 +149,25 @@ filename_cleaning:
   character_mapping:             # 字符映射规则
     "　": " "                    # 全角空格转半角
     "–": "-"                     # 长破折号转短破折号
+    "—": "-"                     # EM破折号转短破折号
   post_cleanup:                  # 清理后处理
     normalize_spaces: true       # 标准化空格
     trim: true                   # 移除首尾空白
     lowercase: false             # 转为小写
+    max_length: 150              # 最大文件名长度
+  
+# === PRON下载命名规范 ===
+download_naming:
+  # 目录结构：[Channel] 模特名/
+  directory_pattern: "[Channel] {model_name}"
+  # 文件名模式：视频标题.扩展名
+  filename_pattern: "{title}.{ext}"
+  # 是否在文件名中包含ID
+  include_video_id: false
+  # 是否使用限制文件名模式（兼容性更好）
+  restrict_filenames: false
+  # Windows兼容性
+  windows_filenames: true
 
 # === 输出文件 ===
 output:
