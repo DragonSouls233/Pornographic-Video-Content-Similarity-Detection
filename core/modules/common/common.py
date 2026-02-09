@@ -145,6 +145,9 @@ def load_models(model_path: str = "models.json") -> dict:
 # 导入智能缓存模块
 from .smart_cache import SmartCache, create_smart_cache
 
+# 导入数据库存储模块
+from .database_storage import create_database_cache_adapter
+
 # 全局智能缓存实例（延迟初始化）
 _smart_cache_instance: SmartCache = None
 
@@ -168,19 +171,34 @@ def get_model_cache_path(cache_dir: str, model_name: str) -> str:
 def get_smart_cache(cache_dir: str = None, config: dict = None) -> SmartCache:
     """
     获取智能缓存实例（单例模式）
+    支持JSON文件存储和数据库存储两种方式
     
     Args:
         cache_dir: 缓存目录
         config: 配置字典
         
     Returns:
-        SmartCache 实例
+        SmartCache 实例（可能是数据库适配器）
     """
     global _smart_cache_instance
     if _smart_cache_instance is None:
         if cache_dir is None:
             cache_dir = 'output/cache'
-        _smart_cache_instance = create_smart_cache(cache_dir, config)
+        
+        # 检查是否启用数据库存储
+        cache_config = config.get('cache', {}) if config else {}
+        use_database = cache_config.get('use_database', False)
+        
+        if use_database:
+            # 使用数据库存储
+            db_path = cache_config.get('database_path', 'output/cache.db')
+            _smart_cache_instance = create_database_cache_adapter(db_path, config)
+            logging.getLogger(__name__).info(f"使用数据库存储: {db_path}")
+        else:
+            # 使用传统的JSON文件存储
+            _smart_cache_instance = create_smart_cache(cache_dir, config)
+            logging.getLogger(__name__).info(f"使用JSON文件存储: {cache_dir}")
+    
     return _smart_cache_instance
 
 def load_cache(cache_path: str) -> Set[str]:

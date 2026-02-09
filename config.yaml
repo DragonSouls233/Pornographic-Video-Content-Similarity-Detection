@@ -8,6 +8,9 @@ cache:
   # 智能缓存配置（新增）
   incremental_update: true      # 启用增量更新
   page_expiry_hours: 24         # 页面缓存过期时间（小时）
+  # 数据库存储配置（可选）
+  use_database: false           # 是否使用数据库存储替代JSON文件
+  database_path: output/cache.db  # 数据库文件路径
 comparison:
   case_sensitive: false
   ignore_list:
