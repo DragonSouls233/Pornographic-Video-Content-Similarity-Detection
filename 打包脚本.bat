@@ -134,12 +134,6 @@ if not exist "dist\requirements.txt" (
         echo      - requirements.txt 已复制
     )
 )
-if not exist "dist\demo_complete_download.py" (
-    if exist "demo_complete_download.py" (
-        copy "demo_complete_download.py" "dist\demo_complete_download.py" >nul
-        echo      - demo_complete_download.py 已复制
-    )
-)
 echo      完成!
 echo.
 

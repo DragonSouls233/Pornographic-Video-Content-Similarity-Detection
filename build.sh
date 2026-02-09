@@ -124,10 +124,6 @@ if [ ! -f "dist/requirements.txt" ] && [ -f "requirements.txt" ]; then
     cp requirements.txt dist/requirements.txt
     echo "     - requirements.txt 已复制"
 fi
-if [ ! -f "dist/demo_complete_download.py" ] && [ -f "demo_complete_download.py" ]; then
-    cp demo_complete_download.py dist/demo_complete_download.py
-    echo "     - demo_complete_download.py 已复制"
-fi
 echo "     完成!"
 echo ""
 

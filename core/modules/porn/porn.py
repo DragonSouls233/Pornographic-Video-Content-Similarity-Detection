@@ -156,9 +156,42 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
             has_next = False
             for button in next_buttons:
                 text = button.get_text(strip=True).lower()
-                if text in ['next', '>', '下一页']:
+                href = button.get('href', '')
+                # 更严格的下一页检测
+                if text in ['next', '>', '下一页', '→', 'next page'] or ('page=' in href and not 'javascript' in href.lower()):
+                    # 检查是否是最后一页
+                    if 'page=' in href:
+                        try:
+                            page_param = href.split('page=')[-1].split('&')[0]
+                            if page_param.isdigit():
+                                next_page_num = int(page_param)
+                                if next_page_num <= page_num:
+                                    continue
+                        except:
+                            pass
+                    # 检查按钮是否可用
+                    style = button.get('style', '')
+                    disabled = button.get('disabled')
+                    class_attr = button.get('class', [])
+                    if 'display: none' in style or 'visibility: hidden' in style or disabled or 'disabled' in str(class_attr):
+                        continue
                     has_next = True
                     break
+            
+            # 尝试通用分页检查
+            if not has_next:
+                pagination = soup.select_one('.pagination, .pages, .pageNumbers, .pagination.pagination-themed, nav.pagination')
+                if pagination:
+                    page_links = pagination.select('a')
+                    page_numbers = []
+                    for link in page_links:
+                        text = link.get_text(strip=True)
+                        if text.isdigit():
+                            page_numbers.append(int(text))
+                    if page_numbers:
+                        max_page = max(page_numbers)
+                        if page_num < max_page:
+                            has_next = True
             
             if not has_next:
                 logger.info("  PORN - Selenium 没有下一页，停止抓取")
@@ -333,27 +366,37 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                     for button in next_buttons:
                         text = button.get_text(strip=True).lower()
                         href = button.get('href', '')
-                        if text in ['next', '>', '下一页'] or 'page=' in href:
+                        # 更严格的下一页检测
+                        if text in ['next', '>', '下一页', '→', 'next page'] or ('page=' in href and not 'javascript' in href.lower()):
                             # 检查是否是最后一页
                             if 'page=' in href:
                                 # 提取page参数值
-                                page_param = href.split('page=')[-1].split('&')[0]
-                                if page_param.isdigit():
-                                    # 如果page参数值小于等于当前页，说明是最后一页
-                                    if int(page_param) <= page_num:
-                                        continue
-                            # 检查按钮是否可见或可用
+                                try:
+                                    page_param = href.split('page=')[-1].split('&')[0]
+                                    if page_param.isdigit():
+                                        # 下一个页码应该大于当前页
+                                        next_page_num = int(page_param)
+                                        if next_page_num <= page_num:
+                                            logger.debug(f"  PORN - 忽略无效下一页链接: {href}")
+                                            continue
+                                except:
+                                    pass
+                            # 检查按钮是否可见或可用（禁用状态检查）
                             style = button.get('style', '')
-                            if 'display: none' in style or 'visibility: hidden' in style:
+                            disabled = button.get('disabled')
+                            class_attr = button.get('class', [])
+                            if 'display: none' in style or 'visibility: hidden' in style or disabled or 'disabled' in str(class_attr):
+                                logger.debug(f"  PORN - 忽略已禁用的下一页按钮")
                                 continue
+                            logger.debug(f"  PORN - 找到下一页按钮: {href}")
                             has_next = True
                             break
                 
-                # 尝试通用分页检查
+                # 尝试通用分页检查（当上面没检测到时）
                 if not has_next:
-                    pagination = soup.select_one('.pagination, .pages, .pageNumbers, .pagination.pagination-themed')
+                    pagination = soup.select_one('.pagination, .pages, .pageNumbers, .pagination.pagination-themed, nav.pagination')
                     if pagination:
-                        # 查找当前页和最大页
+                        # 查找所有页码链接
                         page_links = pagination.select('a')
                         page_numbers = []
                         for link in page_links:
@@ -363,7 +406,9 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                         
                         if page_numbers:
                             max_page = max(page_numbers)
+                            current_page = min([int(x) for x in page_numbers if str(x) in str(page_num)]) if page_num in [int(x) for x in page_numbers if str(x).isdigit()] else page_num
                             if page_num < max_page:
+                                logger.debug(f"  PORN - 通用分页检测: 当前页={page_num}, 最大页={max_page}")
                                 has_next = True
                 
                 if not has_next:

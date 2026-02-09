@@ -174,6 +174,7 @@ class ModelManagerGUI:
         ttk.Label(action_frame, text="下载功能", font=("Arial", 10, "bold")).pack(pady=5)
         ttk.Button(action_frame, text="下载选中模特完整目录", command=self.download_selected_models_complete, width=20).pack(fill=tk.X, pady=2)
         ttk.Button(action_frame, text="批量下载所有模特", command=self.download_all_models_complete, width=20).pack(fill=tk.X, pady=2)
+        ttk.Button(action_frame, text="下载单个模特完整目录", command=self.download_single_model_complete, width=20).pack(fill=tk.X, pady=2)
         
         # 分隔线
         ttk.Separator(action_frame, orient='horizontal').pack(fill=tk.X, pady=10)
@@ -1180,10 +1181,14 @@ class ModelManagerGUI:
     def run_script(self):
         """在线程中运行查重脚本"""
         try:
-            # 获取所有目录
-            dirs = [self.dir_listbox.get(i) for i in range(self.dir_listbox.size())]
+            # 获取本地目录
+            porn_dir = self.porn_dir_var.get().strip()
+            jav_dir = self.jav_dir_var.get().strip()
+            dirs = [d for d in [porn_dir, jav_dir] if d]  # 测诽算法：筛选有效目录
+            
             if not dirs:
-                messagebox.showinfo("提示", "请至少添加一个本地目录")
+                self.log_text.delete(1.0, tk.END)
+                self.log_text.insert(tk.END, "错误: 没有配置本地目录\n请先在配置中添加 PORN 或 JAV 目录")
                 return
             
             # 导入核心模块（使用动态导入方式）
@@ -2208,14 +2213,24 @@ class ModelManagerGUI:
             
             selected_models = []
             for item in selected_items:
-                model_name = self.model_tree.item(item, "values")[0]
-                url = self.model_tree.item(item, "values")[1]
+                model_info = self.model_tree.item(item, "values")
+                model_name = model_info[0]
+                module = model_info[1]
+                url = model_info[2]
                 if url and url.strip():
                     selected_models.append((model_name, url.strip(), None))
             
             if not selected_models:
                 messagebox.showwarning("提示", "选中的模特没有有效的URL")
                 return
+            
+            # 选择下载目录
+            save_dir = self._select_download_directory()
+            if not save_dir:
+                return
+            
+            # 更新选中模特的目录
+            selected_models = [(name, url, save_dir) for name, url, _ in selected_models]
             
             # 询问最大下载数量
             max_videos_dialog = tk.Toplevel(self.root)
@@ -2237,6 +2252,7 @@ class ModelManagerGUI:
                     
                     # 确认下载
                     confirm_msg = f"确定要完整下载 {len(selected_models)} 个选中模特的目录吗？\n"
+                    confirm_msg += f"保存目录: {save_dir}\n"
                     confirm_msg += "这将下载每个模特的所有视频！"
                     
                     if messagebox.askyesno("确认下载", confirm_msg):
@@ -2266,25 +2282,177 @@ class ModelManagerGUI:
             # 获取所有模特
             all_models = []
             for item in self.model_tree.get_children():
-                model_name = self.model_tree.item(item, "values")[0]
-                url = self.model_tree.item(item, "values")[1]
+                model_info = self.model_tree.item(item, "values")
+                model_name = model_info[0]
+                module = model_info[1]
+                url = model_info[2]
                 if url and url.strip():
                     all_models.append((model_name, url.strip(), None))
-            
+                
             if not all_models:
                 messagebox.showwarning("提示", "没有可下载的模特")
+                return
+                
+            # 选择下载目录
+            save_dir = self._select_download_directory()
+            if not save_dir:
+                return
+                
+            # 更新模特的目录
+            all_models = [(name, url, save_dir) for name, url, _ in all_models]
+                
+            # 询问最大下载数量
+            max_videos_dialog = tk.Toplevel(self.root)
+            max_videos_dialog.title("批量下载设置")
+            max_videos_dialog.geometry("300x180")
+            max_videos_dialog.transient(self.root)
+            max_videos_dialog.grab_set()
+                
+            ttk.Label(max_videos_dialog, text=f"保存目录: {save_dir}", font=("Arial", 9)).pack(pady=10)
+            ttk.Label(max_videos_dialog, text="每个模特最大下载数量:", font=("Arial", 10)).pack(pady=10)
+                
+            max_videos_var = tk.StringVar(value="50")  # 默认限哦50个
+            ttk.Entry(max_videos_dialog, textvariable=max_videos_var, width=10).pack(pady=10)
+            ttk.Label(max_videos_dialog, text="(0=无限制)").pack()
+                
+            def confirm_download():
+                try:
+                    max_videos = int(max_videos_var.get()) if max_videos_var.get().strip() else 0
+                    max_videos_dialog.destroy()
+                        
+                    # 确认下载
+                    confirm_msg = f"确定要批量下载所有 {len(all_models)} 个模特的完整目录吗？\n"
+                    if max_videos > 0:
+                        confirm_msg += f"每个模特最多下载 {max_videos} 个视频\n"
+                    confirm_msg += "这将下载大量视频并消耗大量时间和存储空间！"
+                        
+                    if messagebox.askyesno("确认批量下载", confirm_msg):
+                        self._download_complete_directories(all_models, max_videos)
+                except ValueError:
+                    messagebox.showerror("错误", "请输入有效的数字")
+                
+            button_frame = ttk.Frame(max_videos_dialog)
+            button_frame.pack(pady=20)
+            ttk.Button(button_frame, text="确定", command=confirm_download).pack(side=tk.LEFT, padx=10)
+            ttk.Button(button_frame, text="取消", command=max_videos_dialog.destroy).pack(side=tk.LEFT, padx=10)
+                
+            # 居中显示
+            max_videos_dialog.update_idletasks()
+            x = (max_videos_dialog.winfo_screenwidth() // 2) - (max_videos_dialog.winfo_width() // 2)
+            y = (max_videos_dialog.winfo_screenheight() // 2) - (max_videos_dialog.winfo_height() // 2)
+            max_videos_dialog.geometry(f"+{x}+{y}")
+                
+            max_videos_dialog.mainloop()
+                
+        except Exception as e:
+            messagebox.showerror("错误", f"批量下载所有模特失败: {e}")
+    
+    def _select_download_directory(self):
+        """询问用户选择下载目录"""
+        # 获取配置中的默认目录
+        porn_dir = self.porn_dir_var.get().strip()
+        jav_dir = self.jav_dir_var.get().strip()
+        
+        # 创建目录选择对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title("下载设置 - 选择保存目录")
+        dialog.geometry("450x200")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="选择保存位置:", font=("Arial", 10, "bold")).pack(pady=10)
+        
+        selected_dir = [None]  # 使用列表以供闭包修改
+        
+        def select_pornhub():
+            if porn_dir:
+                selected_dir[0] = porn_dir
+                dialog.destroy()
+            else:
+                messagebox.showwarning("提示", "未配置 PORN 目录")
+        
+        def select_javdb():
+            if jav_dir:
+                selected_dir[0] = jav_dir
+                dialog.destroy()
+            else:
+                messagebox.showwarning("提示", "未配置 JAVDB 目录")
+        
+        def custom_directory():
+            dir_path = filedialog.askdirectory(
+                title="选择本地保存目录",
+                initialdir=porn_dir or jav_dir or os.path.expanduser("~")
+            )
+            if dir_path:
+                selected_dir[0] = dir_path
+                dialog.destroy()
+        
+        # 按钒框架
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=20, fill=tk.X, padx=20)
+        
+        if porn_dir:
+            ttk.Button(button_frame, text=f"PORN 目录\n{porn_dir}", 
+                      command=select_pornhub, width=40).pack(fill=tk.X, pady=5)
+        
+        if jav_dir:
+            ttk.Button(button_frame, text=f"JAVDB 目录\n{jav_dir}", 
+                      command=select_javdb, width=40).pack(fill=tk.X, pady=5)
+        
+        ttk.Button(button_frame, text="自定义目录", 
+                  command=custom_directory, width=40).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="取消", 
+                  command=dialog.destroy, width=40).pack(fill=tk.X, pady=5)
+        
+        # 居中显示
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        dialog.mainloop()
+        return selected_dir[0]
+    
+    def download_single_model_complete(self):
+        """下载单个模特的完整目录"""
+        try:
+            # 获取选中的模特
+            selected_items = self.model_tree.selection()
+            if not selected_items:
+                messagebox.showwarning("提示", "请先选择一个模特")
+                return
+            
+            if len(selected_items) > 1:
+                messagebox.showwarning("提示", "此功能仅收一个模特，请单选")
+                return
+            
+            item = selected_items[0]
+            model_info = self.model_tree.item(item, "values")
+            model_name = model_info[0]
+            url = model_info[2]
+            
+            if not url or not url.strip():
+                messagebox.showwarning("提示", "此模特没有有效的URL")
+                return
+            
+            # 选择下载目录
+            save_dir = self._select_download_directory()
+            if not save_dir:
                 return
             
             # 询问最大下载数量
             max_videos_dialog = tk.Toplevel(self.root)
-            max_videos_dialog.title("批量下载设置")
-            max_videos_dialog.geometry("300x150")
+            max_videos_dialog.title("下载设置")
+            max_videos_dialog.geometry("300x180")
             max_videos_dialog.transient(self.root)
             max_videos_dialog.grab_set()
             
-            ttk.Label(max_videos_dialog, text="每个模特最大下载数量:", font=("Arial", 10)).pack(pady=20)
+            ttk.Label(max_videos_dialog, text=f"模特: {model_name}\n保存目录: {save_dir}", 
+                     font=("Arial", 9)).pack(pady=10)
+            ttk.Label(max_videos_dialog, text="每个模特最大下载数量:", 
+                     font=("Arial", 10)).pack(pady=10)
             
-            max_videos_var = tk.StringVar(value="50")  # 默认限制50个
+            max_videos_var = tk.StringVar(value="0")
             ttk.Entry(max_videos_dialog, textvariable=max_videos_var, width=10).pack(pady=10)
             ttk.Label(max_videos_dialog, text="(0=无限制)").pack()
             
@@ -2294,13 +2462,11 @@ class ModelManagerGUI:
                     max_videos_dialog.destroy()
                     
                     # 确认下载
-                    confirm_msg = f"确定要批量下载所有 {len(all_models)} 个模特的完整目录吗？\n"
-                    if max_videos > 0:
-                        confirm_msg += f"每个模特最多下载 {max_videos} 个视频\n"
-                    confirm_msg += "这将下载大量视频并消耗大量时间和存储空间！"
+                    confirm_msg = f"确定要完整下载模特『{model_name}』的目录吗？\n这将下载该模特的所有视频！"
                     
-                    if messagebox.askyesno("确认批量下载", confirm_msg):
-                        self._download_complete_directories(all_models, max_videos)
+                    if messagebox.askyesno("确认下载", confirm_msg):
+                        selected_models = [(model_name, url.strip(), save_dir)]
+                        self._download_complete_directories(selected_models, max_videos)
                 except ValueError:
                     messagebox.showerror("错误", "请输入有效的数字")
             
@@ -2318,7 +2484,7 @@ class ModelManagerGUI:
             max_videos_dialog.mainloop()
             
         except Exception as e:
-            messagebox.showerror("错误", f"批量下载所有模特失败: {e}")
+            messagebox.showerror("错误", f"下载单个模特失败: {e}")
     
     def open_browser_window(self):
         """打开独立的浏览器窗口"""
