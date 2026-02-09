@@ -501,8 +501,8 @@ class ModelManagerGUI:
         
         # 当前文件信息
         ttk.Label(progress_frame, text="当前文件:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.download_file_var = tk.StringVar(value="等待中...")
-        ttk.Label(progress_frame, textvariable=self.download_file_var, foreground="blue").grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
+        self.current_file_var = tk.StringVar(value="等待中...")
+        ttk.Label(progress_frame, textvariable=self.current_file_var, foreground="blue").grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
         
         # 下载速度
         ttk.Label(progress_frame, text="下载速度:").grid(row=1, column=0, sticky=tk.W, pady=5)
@@ -2183,13 +2183,13 @@ class ModelManagerGUI:
             # 重置下载统计
             self.downloaded_count_var.set("0")
             self.total_count_var.set(str(len(download_items)))
-            self.download_progress_var.set(0)
-            self.download_percentage_var.set("0%")
-            self.download_speed_var.set("0 KB/s")
+            self.download_progress_var_tab.set(0)
+            self.download_percentage_var_tab.set("0%")
+            self.download_speed_var_tab.set("0 KB/s")
             self.current_file_var.set("准备开始...")
             
             # 清空下载日志
-            self.download_log_text.delete('1.0', tk.END)
+            self.download_log_text_tab.delete('1.0', tk.END)
             self.add_download_log("开始下载任务，共 " + str(len(download_items)) + " 个视频")
             
             def download_worker():
@@ -2214,9 +2214,9 @@ class ModelManagerGUI:
                             speed_bytes = d.get('speed', 0)
                             if speed_bytes:
                                 speed_str = self._format_bytes(speed_bytes) + "/s"
-                                self.download_speed_var.set(speed_str)
+                                self.download_speed_var_tab.set(speed_str)
                             else:
-                                self.download_speed_var.set("0 KB/s")
+                                self.download_speed_var_tab.set("0 KB/s")
                             
                             # 计算进度百分比
                             total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
@@ -2226,8 +2226,8 @@ class ModelManagerGUI:
                                 percentage = (downloaded_bytes / total_bytes) * 100
                                 # 计算整体进度（包括已完成的文件）
                                 overall_percentage = ((downloaded_count + (percentage / 100.0)) / total_count) * 100
-                                self.download_progress_var.set(overall_percentage)
-                                self.download_percentage_var.set(f"{overall_percentage:.1f}%")
+                                self.download_progress_var_tab.set(overall_percentage)
+                                self.download_percentage_var_tab.set(f"{overall_percentage:.1f}%")
                                 
                                 # 更新总大小显示
                                 total_size_mb = self._format_bytes(total_bytes)
@@ -2269,8 +2269,8 @@ class ModelManagerGUI:
                                 
                                 # 更新整体进度
                                 overall_percentage = (downloaded_count / total_count) * 100
-                                self.download_progress_var.set(overall_percentage)
-                                self.download_percentage_var.set(f"{overall_percentage:.1f}%")
+                                self.download_progress_var_tab.set(overall_percentage)
+                                self.download_percentage_var_tab.set(f"{overall_percentage:.1f}%")
                                 
                                 file_path = result.get('file_path', 'N/A')
                                 self.add_download_log(f"✅ 下载成功: {title[:50]}...")

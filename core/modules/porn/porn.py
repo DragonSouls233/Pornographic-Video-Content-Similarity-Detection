@@ -118,6 +118,11 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
                         if any(keyword in title.lower() for keyword in excluded_keywords):
                             continue
                         
+                        # 🚨 关键修复：验证视频是否属于当前模特
+                        if not _is_video_belong_to_model(container, model_name, url, logger):
+                            logger.debug(f"    跳过非当前模特的视频: {title[:50]}...")
+                            continue
+                        
                         cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
                         
@@ -160,6 +165,12 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
                 for elem in soup.select('a.thumbnailTitle'):
                     title = elem.get_text(strip=True)
                     if title and len(title) > 3 and len(title) < 500:
+                        # 🚨 关键修复：验证视频是否属于当前模特
+                        parent_container = elem.find_parent('div', class_=['videoContainer', 'video', 'videoBrick'])
+                        if parent_container and not _is_video_belong_to_model(parent_container, model_name, url, logger):
+                            logger.debug(f"    跳过非当前模特的视频: {title[:50]}...")
+                            continue
+                        
                         cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
                         video_url = elem.get('href')
@@ -384,6 +395,12 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                 for elem in soup.select('a.thumbnailTitle'):
                     title = elem.get_text(strip=True)
                     if title and len(title) > 3:
+                        # 🚨 关键修复：验证视频是否属于当前模特
+                        parent_container = elem.find_parent('div', class_=['videoContainer', 'video', 'videoBrick'])
+                        if parent_container and not _is_video_belong_to_model(parent_container, model_name, url, logger):
+                            logger.debug(f"    跳过非当前模特的视频: {title[:50]}...")
+                            continue
+                        
                         # 对在线标题应用清理流程
                         cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
@@ -409,6 +426,12 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                     for elem in soup.select('.title, .video-title, h3.title'):
                         title = elem.get_text(strip=True)
                         if title and len(title) > 3:
+                            # 🚨 关键修复：验证视频是否属于当前模特
+                            parent_container = elem.find_parent('div', class_=['videoContainer', 'video', 'videoBrick'])
+                            if parent_container and not _is_video_belong_to_model(parent_container, model_name, url, logger):
+                                logger.debug(f"    跳过非当前模特的视频: {title[:50]}...")
+                                continue
+                            
                             cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                             page_titles.add(cleaned_title)
                             # 尝试找到父链接
@@ -528,6 +551,83 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
     
     logger.info(f"  PORN - 总共提取到 {len(all_titles)} 个视频标题")
     return all_titles, title_to_url
+
+def _is_video_belong_to_model(video_container, model_name: str, model_url: str, logger) -> bool:
+    """
+    验证视频是否属于指定模特
+    
+    Args:
+        video_container: 视频容器元素
+        model_name: 目标模特名称
+        model_url: 模特页面URL
+        logger: 日志记录器
+        
+    Returns:
+        bool: True表示属于该模特，False表示不属于
+    """
+    try:
+        # 方法1: 检查视频容器中是否包含模特相关信息
+        # 查找模特名或用户名元素
+        model_indicators = video_container.select(
+            '.username, .uploader, .channelName, .modelName, '
+            '.userInfo .usernameWrap, [data-user-name], [data-channel-name]'
+        )
+        
+        for indicator in model_indicators:
+            indicator_text = indicator.get_text(strip=True)
+            if indicator_text:
+                # 标准化比较
+                indicator_clean = indicator_text.lower().replace(' ', '').replace('_', '').replace('-', '')
+                model_clean = model_name.lower().replace(' ', '').replace('_', '').replace('-', '')
+                
+                # 检查是否匹配
+                if (indicator_clean == model_clean or 
+                    indicator_clean in model_clean or 
+                    model_clean in indicator_clean):
+                    logger.debug(f"    ✅ 视频确认属于模特: {indicator_text} 匹配 {model_name}")
+                    return True
+        
+        # 方法2: 检查视频链接是否指向正确的模特页面
+        video_links = video_container.find_all('a', href=True)
+        for link in video_links:
+            href = link.get('href', '')
+            # 如果链接包含模特页面信息
+            if '/model/' in href and model_name.lower().replace(' ', '-') in href.lower():
+                logger.debug(f"    ✅ 通过链接确认视频属于模特: {href}")
+                return True
+        
+        # 方法3: 检查页面上下文（如果是模特专属页面）
+        # 从model_url提取模特标识
+        if '/model/' in model_url:
+            # 如果是在模特专属页面，大部分视频应该属于该模特
+            # 除非明确标识了其他模特
+            
+            # 检查是否有明确的其他模特标识
+            other_model_indicators = video_container.select(
+                '.username:not(.current-model), .uploader:not(.current-model)'
+            )
+            
+            if other_model_indicators:
+                # 如果找到了其他模特标识，需要进一步验证
+                for other_indicator in other_model_indicators:
+                    other_text = other_indicator.get_text(strip=True)
+                    if other_text and other_text.lower() != model_name.lower():
+                        logger.debug(f"    ❌ 视频属于其他模特: {other_text}")
+                        return False
+            
+            # 如果没有其他模特标识，在模特页面上的视频通常属于该模特
+            logger.debug(f"    ✅ 在模特页面上，默认认为视频属于: {model_name}")
+            return True
+        
+        # 方法4: 更宽松的匹配（用于处理模糊情况）
+        # 如果以上方法都无法确定，采用较宽松的策略
+        logger.debug(f"    ⚠️ 无法明确验证视频归属，采用宽松匹配策略")
+        return True  # 默认允许，避免过度过滤
+        
+    except Exception as e:
+        logger.debug(f"    ⚠️ 模特验证出现异常: {e}，默认允许视频")
+        return True  # 出现异常时保守处理
+
 
 def clean_porn_title(title: str, patterns: List[str]) -> str:
     """清理PORN视频标题"""
