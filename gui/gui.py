@@ -115,27 +115,36 @@ class ModelManagerGUI:
         list_frame = ttk.LabelFrame(frame, text="模特列表", padding="10")
         list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
         
-        # 搜索框
+        # 搜索框和模块筛选
         search_frame = ttk.Frame(list_frame)
         search_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Label(search_frame, text="搜索: ").pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
-        search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=30)
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=25)
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 10))
+        
+        ttk.Label(search_frame, text="模块: ").pack(side=tk.LEFT)
+        self.model_module_var = tk.StringVar(value="全部")
+        module_combobox = ttk.Combobox(search_frame, textvariable=self.model_module_var, values=["全部", "PRONHUB", "JAVDB"], width=10, state="readonly")
+        module_combobox.pack(side=tk.LEFT, padx=(5, 5))
+        module_combobox.bind("<<ComboboxSelected>>", self.filter_models_by_module)
+        
         ttk.Button(search_frame, text="搜索", command=self.search_models).pack(side=tk.RIGHT)
         
         # 列表视图
-        columns = ("model_name", "url")
+        columns = ("model_name", "module", "url")
         self.model_tree = ttk.Treeview(list_frame, columns=columns, show="headings")
         
         # 设置列标题
         self.model_tree.heading("model_name", text="模特名称")
+        self.model_tree.heading("module", text="模块")
         self.model_tree.heading("url", text="链接")
         
         # 设置列宽
-        self.model_tree.column("model_name", width=200)
-        self.model_tree.column("url", width=400)
+        self.model_tree.column("model_name", width=180)
+        self.model_tree.column("module", width=80)
+        self.model_tree.column("url", width=320)
         
         # 添加滚动条
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.model_tree.yview)
@@ -161,7 +170,7 @@ class ModelManagerGUI:
         ttk.Button(action_frame, text="刷新列表", command=self.refresh_models, width=20).pack(fill=tk.X, pady=5)
         
         # 模特数量统计
-        self.model_count_var = tk.StringVar(value="模特数量: 0")
+        self.model_count_var = tk.StringVar(value="模特数量: 0 (PRONHUB: 0, JAVDB: 0)")
         ttk.Label(action_frame, textvariable=self.model_count_var).pack(pady=10)
     
     def init_run_tab(self):
@@ -592,9 +601,39 @@ class ModelManagerGUI:
                     json.dump({}, f, ensure_ascii=False, indent=2)
                 messagebox.showinfo("提示", "models.json文件不存在，已自动创建空文件")
                 return {}
+            
             # 文件存在，读取内容
             with open("models.json", "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            
+            # 兼容旧格式：如果models.json是简单字典，自动迁移为新格式
+            # 新格式：每个模特包含 module 和 url 字段
+            migrated = False
+            new_data = {}
+            
+            for key, value in data.items():
+                if isinstance(value, str):
+                    # 旧格式：{model_name: url}
+                    # 根据URL自动判断模块类型
+                    module = "JAVDB" if "javdb" in value.lower() else "PRONHUB"
+                    new_data[key] = {
+                        "module": module,
+                        "url": value
+                    }
+                    migrated = True
+                elif isinstance(value, dict):
+                    # 新格式：{model_name: {"module": "PRONHUB/JAVDB", "url": "..."}}
+                    new_data[key] = value
+            
+            # 如果发生了迁移，保存新格式
+            if migrated:
+                self.models = new_data
+                self.save_models()
+                messagebox.showinfo("提示", "模特数据已自动迁移为新格式")
+            else:
+                self.models = new_data
+            
+            return self.models
         except Exception as e:
             messagebox.showerror("错误", f"加载模特数据失败: {e}")
             return {}
@@ -615,39 +654,68 @@ class ModelManagerGUI:
         for item in self.model_tree.get_children():
             self.model_tree.delete(item)
         
+        # 统计各模块数量
+        pronhub_count = 0
+        javdb_count = 0
+        
         # 添加模特数据
-        for model_name, url in self.models.items():
-            self.model_tree.insert("", tk.END, values=(model_name, url))
+        for model_name, model_info in self.models.items():
+            if isinstance(model_info, dict):
+                module = model_info.get("module", "JAVDB")
+                url = model_info.get("url", "")
+                
+                # 统计
+                if module == "PRONHUB":
+                    pronhub_count += 1
+                else:
+                    javdb_count += 1
+                
+                # 根据模块筛选显示
+                selected_module = self.model_module_var.get()
+                if selected_module == "全部" or selected_module == module:
+                    self.model_tree.insert("", tk.END, values=(model_name, module, url))
         
         # 更新统计信息
-        self.model_count_var.set(f"模特数量: {len(self.models)}")
+        self.model_count_var.set(f"模特数量: {len(self.models)} (PRONHUB: {pronhub_count}, JAVDB: {javdb_count})")
+    
+    def filter_models_by_module(self, event=None):
+        """根据模块筛选模特"""
+        self.update_model_list()
     
     def search_models(self):
         """搜索模特"""
         search_term = self.search_var.get().lower()
+        selected_module = self.model_module_var.get()
         
         # 清空现有列表
         for item in self.model_tree.get_children():
             self.model_tree.delete(item)
         
         # 添加匹配的模特
-        for model_name, url in self.models.items():
-            if search_term in model_name.lower() or search_term in url.lower():
-                self.model_tree.insert("", tk.END, values=(model_name, url))
+        for model_name, model_info in self.models.items():
+            if isinstance(model_info, dict):
+                module = model_info.get("module", "JAVDB")
+                url = model_info.get("url", "")
+                
+                # 根据模块筛选
+                if selected_module == "全部" or selected_module == module:
+                    # 搜索匹配
+                    if search_term in model_name.lower() or search_term in url.lower():
+                        self.model_tree.insert("", tk.END, values=(model_name, module, url))
     
     def add_model(self):
         """添加模特"""
         # 创建对话框
         dialog = tk.Toplevel(self.root)
         dialog.title("添加模特")
-        dialog.geometry("500x200")
+        dialog.geometry("500x240")
         dialog.resizable(False, False)
         
         # 居中显示
         dialog.update_idletasks()
         x = (self.root.winfo_screenwidth() - dialog.winfo_width()) // 2
         y = (self.root.winfo_screenheight() - dialog.winfo_height()) // 2
-        dialog.geometry(f"500x200+{x}+{y}")
+        dialog.geometry(f"500x240+{x}+{y}")
         
         # 创建框架
         frame = ttk.Frame(dialog, padding="20")
@@ -658,18 +726,25 @@ class ModelManagerGUI:
         model_name_var = tk.StringVar()
         ttk.Entry(frame, textvariable=model_name_var, width=40).grid(row=0, column=1, sticky=tk.W, pady=10)
         
+        # 模块选择
+        ttk.Label(frame, text="模块类型: ").grid(row=1, column=0, sticky=tk.W, pady=10)
+        module_var = tk.StringVar(value="JAVDB")
+        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PRONHUB", "JAVDB"], width=37, state="readonly")
+        module_combobox.grid(row=1, column=1, sticky=tk.W, pady=10)
+        
         # 链接
-        ttk.Label(frame, text="链接: ").grid(row=1, column=0, sticky=tk.W, pady=10)
+        ttk.Label(frame, text="链接: ").grid(row=2, column=0, sticky=tk.W, pady=10)
         url_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=url_var, width=40).grid(row=1, column=1, sticky=tk.W, pady=10)
+        ttk.Entry(frame, textvariable=url_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=10)
         
         # 按钮
         button_frame = ttk.Frame(frame)
-        button_frame.grid(row=2, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=20)
         
         def on_ok():
             model_name = model_name_var.get().strip()
             url = url_var.get().strip()
+            module = module_var.get()
             
             if not model_name:
                 messagebox.showerror("错误", "模特名称不能为空")
@@ -679,8 +754,19 @@ class ModelManagerGUI:
                 messagebox.showerror("错误", "链接不能为空")
                 return
             
-            # 添加到模型字典
-            self.models[model_name] = url
+            # 检查URL是否与选择的模块匹配
+            if module == "JAVDB" and "javdb" not in url.lower():
+                if not messagebox.askyesno("警告", f"选择的模块是JAVDB，但链接中不包含'javdb'。\n\n确定要继续吗？"):
+                    return
+            elif module == "PRONHUB" and "javdb" in url.lower():
+                if not messagebox.askyesno("警告", f"选择的模块是PRONHUB，但链接中包含'javdb'。\n\n确定要继续吗？"):
+                    return
+            
+            # 添加到模型字典（新格式）
+            self.models[model_name] = {
+                "module": module,
+                "url": url
+            }
             
             # 保存并更新列表
             if self.save_models():
@@ -812,19 +898,19 @@ class ModelManagerGUI:
         
         # 获取选中项的数据
         item = selected_items[0]
-        model_name, url = self.model_tree.item(item, "values")
+        model_name, module, url = self.model_tree.item(item, "values")
         
         # 创建对话框
         dialog = tk.Toplevel(self.root)
         dialog.title("编辑模特")
-        dialog.geometry("500x200")
+        dialog.geometry("500x240")
         dialog.resizable(False, False)
         
         # 居中显示
         dialog.update_idletasks()
         x = (self.root.winfo_screenwidth() - dialog.winfo_width()) // 2
         y = (self.root.winfo_screenheight() - dialog.winfo_height()) // 2
-        dialog.geometry(f"500x200+{x}+{y}")
+        dialog.geometry(f"500x240+{x}+{y}")
         
         # 创建框架
         frame = ttk.Frame(dialog, padding="20")
@@ -835,17 +921,24 @@ class ModelManagerGUI:
         model_name_var = tk.StringVar(value=model_name)
         ttk.Entry(frame, textvariable=model_name_var, width=40).grid(row=0, column=1, sticky=tk.W, pady=10)
         
+        # 模块选择
+        ttk.Label(frame, text="模块类型: ").grid(row=1, column=0, sticky=tk.W, pady=10)
+        module_var = tk.StringVar(value=module)
+        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PRONHUB", "JAVDB"], width=37, state="readonly")
+        module_combobox.grid(row=1, column=1, sticky=tk.W, pady=10)
+        
         # 链接
-        ttk.Label(frame, text="链接: ").grid(row=1, column=0, sticky=tk.W, pady=10)
+        ttk.Label(frame, text="链接: ").grid(row=2, column=0, sticky=tk.W, pady=10)
         url_var = tk.StringVar(value=url)
-        ttk.Entry(frame, textvariable=url_var, width=40).grid(row=1, column=1, sticky=tk.W, pady=10)
+        ttk.Entry(frame, textvariable=url_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=10)
         
         # 按钮
         button_frame = ttk.Frame(frame)
-        button_frame.grid(row=2, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=20)
         
         def on_ok():
             new_model_name = model_name_var.get().strip()
+            new_module = module_var.get()
             new_url = url_var.get().strip()
             
             if not new_model_name:
@@ -856,14 +949,28 @@ class ModelManagerGUI:
                 messagebox.showerror("错误", "链接不能为空")
                 return
             
+            # 检查URL是否与选择的模块匹配
+            if new_module == "JAVDB" and "javdb" not in new_url.lower():
+                if not messagebox.askyesno("警告", f"选择的模块是JAVDB，但链接中不包含'javdb'。\n\n确定要继续吗？"):
+                    return
+            elif new_module == "PRONHUB" and "javdb" in new_url.lower():
+                if not messagebox.askyesno("警告", f"选择的模块是PRONHUB，但链接中包含'javdb'。\n\n确定要继续吗？"):
+                    return
+            
             # 更新模型字典
             if new_model_name != model_name:
                 # 如果名称改变，删除旧的，添加新的
                 del self.models[model_name]
-                self.models[new_model_name] = new_url
+                self.models[new_model_name] = {
+                    "module": new_module,
+                    "url": new_url
+                }
             else:
-                # 只更新链接
-                self.models[model_name] = new_url
+                # 只更新链接和模块
+                self.models[model_name] = {
+                    "module": new_module,
+                    "url": new_url
+                }
             
             # 保存并更新列表
             if self.save_models():

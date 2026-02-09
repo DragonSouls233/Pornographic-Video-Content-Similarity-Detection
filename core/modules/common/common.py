@@ -98,7 +98,14 @@ def load_config(config_path: str = "config.yaml") -> dict:
         sys.exit(1)
 
 def load_models(model_path: str = "models.json") -> dict:
-    """加载模特配置JSON文件，如果不存在则自动创建空文件"""
+    """加载模特配置JSON文件，如果不存在则自动创建空文件
+    
+    支持两种格式：
+    1. 旧格式：{"模特名": "URL"}
+    2. 新格式：{"模特名": {"module": "PRONHUB/JAVDB", "url": "..."}}
+    
+    返回值：统一转换为 {"模特名": "URL"} 格式以兼容现有代码
+    """
     try:
         if not os.path.exists(model_path):
             # 自动生成空的模特配置文件
@@ -109,16 +116,27 @@ def load_models(model_path: str = "models.json") -> dict:
         
         with open(model_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            
             # 检查是否是schema格式，如果是，尝试获取examples中的模特数据
             if 'examples' in data and len(data['examples']) > 0:
                 example = data['examples'][0]
                 if 'models' in example:
-                    return example['models']
+                    data = example['models']
             # 检查是否是嵌套格式，如 {"models": {"模特名": "URL"}}
             elif 'models' in data:
-                return data['models']
-            # 如果不是schema格式，直接返回
-            return data
+                data = data['models']
+            
+            # 兼容新格式：将 {"模特名": {"module": "...", "url": "..."}} 转换为 {"模特名": "url"}
+            result = {}
+            for model_name, model_info in data.items():
+                if isinstance(model_info, dict):
+                    # 新格式：提取URL
+                    result[model_name] = model_info.get("url", "")
+                else:
+                    # 旧格式：直接使用
+                    result[model_name] = model_info
+            
+            return result
     except Exception as e:
         print(f"模特配置文件加载失败: {e}")
         sys.exit(1)
