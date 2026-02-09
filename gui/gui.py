@@ -7,6 +7,7 @@ import threading
 import queue
 import time
 from datetime import datetime
+from typing import Dict, Optional
 import sys
 
 # 添加项目根目录到Python路径
