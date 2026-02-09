@@ -12,6 +12,14 @@ from typing import Set, List, Tuple, Dict, Optional, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
+import sys
+import os
+
+# 添加项目根目录到Python路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 # 导入模块化的功能
 from core.modules.common.common import (
     setup_logging,
@@ -27,6 +35,15 @@ from core.modules.common.common import (
     test_proxy_connection,
     get_smart_cache
 )
+
+# 导入配置验证模块
+from core.modules.common.config_validator import validate_config_file, print_validation_report
+
+# 导入ChromeDriver管理模块
+from core.modules.common.chrome_driver_manager import check_and_setup_chromedriver
+
+# 导入增强版代理检查模块
+from core.modules.common.enhanced_proxy_checker import EnhancedProxyTester, print_comprehensive_report
 
 from core.modules.common.smart_cache import SmartCache
 
@@ -551,6 +568,9 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         scraper: 抓取工具，可选值: "selenium", "playwright", "drissionpage", "zendriver"
         running_flag: 运行标志，用于控制程序是否继续运行
     """
+    # 初始化日志器（提前初始化以便错误处理）
+    logger = logging.getLogger(__name__)
+    
     try:
         # 模块选择
         if module_arg == "porn":
@@ -563,6 +583,32 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         # 加载配置
         config = load_config()
         models = load_models()
+        
+        # 配置验证（新增）
+        logger.info("🔍 正在验证配置文件...")
+        validation_result = validate_config_file("config.yaml")
+        if not validation_result.valid:
+            logger.error("❌ 配置验证失败，程序无法继续运行")
+            print_validation_report(validation_result)
+            logger.error("\n请修复上述配置问题后重新运行程序")
+            logger.error("💡 提示：可以运行 'python -m core.modules.common.config_validator' 单独验证配置")
+            sys.exit(1)
+        elif validation_result.warnings:
+            logger.warning(f"⚠️  配置验证发现 {len(validation_result.warnings)} 个警告:")
+            for warning in validation_result.warnings:
+                logger.warning(f"  - {warning}")
+        else:
+            logger.info("✅ 配置验证通过")
+        
+        # ChromeDriver检查（新增）
+        if config.get('use_selenium', False) or config.get('scraper', '') == 'selenium':
+            logger.info("\n🔍 正在检查ChromeDriver...")
+            driver_success, driver_message = check_and_setup_chromedriver(config)
+            if driver_success:
+                logger.info(f"✅ {driver_message}")
+            else:
+                logger.warning(f"⚠️  ChromeDriver检查失败: {driver_message}")
+                logger.warning("💡 程序将继续运行，但在使用Selenium时可能会出现问题")
         
         # 如果提供了本地目录，则覆盖配置
         if local_dirs:
@@ -591,13 +637,13 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         logger.info(f"多线程模式: {'启用' if use_multithreading else '禁用'} ({max_workers} 工作线程)")
         logger.info("=" * 60)
         
-        # 代理连接预检
+        # 代理连接预检（增强版）
         proxy_config = config.get('network', {}).get('proxy', {})
         if not proxy_config:
             proxy_config = config.get('proxy', {})
         
         if proxy_config.get('enabled', False):
-            logger.info("\n🔍 检测到已启用代理，正在进行连接测试...")
+            logger.info("\n🔍 检测到已启用代理，正在进行全面连接测试...")
             
             proxy_type = proxy_config.get('type', 'http')
             proxy_host = proxy_config.get('host', '127.0.0.1')
@@ -605,24 +651,28 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
             logger.info(f"   代理类型: {proxy_type}")
             logger.info(f"   代理地址: {proxy_host}:{proxy_port}")
             
-            if not test_proxy_connection(proxy_config, timeout=10, logger=logger):
-                logger.error("\n" + "=" * 60)
-                logger.error("❌ 代理连接失败！")
-                logger.error("=" * 60)
-                logger.error("\n请检查以下问题：")
-                logger.error("  1. 代理工具（如 v2rayN、Clash 等）是否已启动")
-                logger.error("  2. 代理配置是否正确（主机地址和端口）")
-                logger.error("  3. 代理工具是否已成功连接到服务器")
-                logger.error("  4. 防火墙是否阻止了代理连接")
-                logger.error("\n💡 解决方法：")
-                logger.error("  • 启动代理工具并确保连接成功")
-                logger.error("  • 在 config.yaml 中修改代理配置")
-                logger.error("  • 或者在 config.yaml 中设置 proxy.enabled: false 禁用代理")
-                logger.error("\n程序已退出，请解决代理问题后重新运行。")
-                logger.error("=" * 60)
-                sys.exit(1)
+            # 使用增强版代理检查
+            tester = EnhancedProxyTester(proxy_config, timeout=15)
+            check_result = tester.comprehensive_check()
             
-            logger.info("✅ 代理连接测试通过，继续执行...\n")
+            # 打印详细报告
+            print_comprehensive_report(check_result)
+            
+            if not check_result.overall_success:
+                logger.error("\n" + "=" * 60)
+                logger.error("❌ 代理连接检查失败！")
+                logger.error("=" * 60)
+                logger.error("\n请根据上述建议检查代理配置")
+                logger.error("\n程序将继续运行，但可能出现网络问题")
+                logger.error("=" * 60)
+                
+                # 询问用户是否继续
+                user_input = input("\n是否继续运行程序？(y/N): ").strip().lower()
+                if user_input not in ['y', 'yes']:
+                    logger.info("用户选择退出程序")
+                    sys.exit(1)
+            else:
+                logger.info("✅ 代理连接检查通过，继续执行...\n")
         else:
             logger.info("\n📡 未启用代理，使用直接连接\n")
         
