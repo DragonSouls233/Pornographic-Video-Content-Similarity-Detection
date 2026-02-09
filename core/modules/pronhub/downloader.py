@@ -17,7 +17,6 @@ from bs4 import BeautifulSoup
 
 # 导入项目通用模块
 from core.modules.common.common import get_config, get_session, ensure_dir_exists
-from core.modules.common.proxy import get_proxies
 
 
 # 设置日志

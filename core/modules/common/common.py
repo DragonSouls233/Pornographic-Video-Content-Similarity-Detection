@@ -516,3 +516,35 @@ def _record_missing_detailed(model_name: str, url: str, missing_titles: List[Tup
         logger.warning(f"  🔴 缺失 {len(missing_titles)} 个视频，已记录到缺失日志（详细模板）")
     else:
         logger.info(f"  ✅ 模特 {model_name} 视频完整，无缺失")
+
+
+# --- 全局配置访问函数 ---
+def get_config():
+    """获取全局配置"""
+    return load_config()
+
+def get_session():
+    """获取全局会话对象"""
+    import requests
+    config = get_config()
+    session = requests.Session()
+    
+    # 配置代理
+    if config.get('network', {}).get('proxy', {}).get('enabled', False):
+        proxy_config = config['network']['proxy']
+        proxy_url = f"{proxy_config.get('http', 'socks5://127.0.0.1:10808')}"
+        session.proxies = {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+    
+    # 配置请求头
+    headers = config.get('network', {}).get('headers', {})
+    if headers:
+        session.headers.update(headers)
+    
+    return session
+
+def ensure_dir_exists(dir_path):
+    """确保目录存在"""
+    Path(dir_path).mkdir(parents=True, exist_ok=True)

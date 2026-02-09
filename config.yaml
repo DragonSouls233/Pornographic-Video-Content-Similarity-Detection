@@ -57,8 +57,19 @@ filename_cleaning:
     lowercase: false
     normalize_spaces: true
     trim: true
+# 本地目录配置（分类管理）
 local_roots:
-- test_videos
+  # Western adult content directories
+  porn:
+    - "F:/作品/Porn"
+    - "F:/作品/Western"
+  # Japanese adult video directories  
+  jav:
+    - "F:/作品/JAV"
+    - "F:/作品/Japanese"
+  # General content directories
+  general:
+    - "F:/作品/General"
 local_scan:
   follow_symlinks: false
   ignore_dirs:
@@ -72,6 +83,54 @@ local_scan:
   model_dir_pattern: ^\[.*?\]\s*
   scan_timeout: -1
   thread_count: 3
+  
+  # 分类扫描配置
+  category_scan:
+    # Porn 内容特定设置
+    porn:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      - "private"
+      - "system"
+      ignore_files:
+      - Thumbs.db
+      - "desktop.ini"
+      max_depth: 3
+      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
+      # 特征文件名模式（识别模特目录）
+      model_patterns:
+      - "^([A-Z][a-z]+[A-Z][a-z]+)$"  # 驼峰命名
+      - "^([A-Za-z]{3,20})$"           # 简单字母名
+      - "^([A-Za-z0-9_-]+)$"           # 包含数字和下划线
+    
+    # JAV 内容特定设置
+    jav:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      - "private"
+      - "system"
+      ignore_files:
+      - Thumbs.db
+      - "desktop.ini"
+      max_depth: 4
+      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
+      # JAV 特有的模特目录模式
+      model_patterns:
+      - "^([A-Za-z]{3,20})$"           # 英文/罗马音
+      - "^([A-Za-z0-9_-]+)$"           # 包含数字
+      - "^([\\u3040-\\u309F\\u30A0-\\u30FF]+)$"  # 日文平假名/片假名
+    
+    # 通用内容设置
+    general:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      ignore_files:
+      - Thumbs.db
+      max_depth: 2
+      model_dir_pattern: ^\[.*?\]\s*
 log_dir: logs
 logging:
   backup_count: 5
@@ -123,6 +182,35 @@ output:
   max_file_size: -1
   overwrite_existing: true
   retention_days: -1
+  
+  # 分类输出配置
+  category_output:
+    # Porn 内容输出设置
+    porn:
+      directory_structure: "porn/country/model"
+      filename_pattern: 'porn_{timestamp}_{type}'
+      formats: ["txt", "json"]
+      
+    # JAV 内容输出设置
+    jav:
+      directory_structure: "jav/studio/model"
+      filename_pattern: 'jav_{timestamp}_{type}'
+      formats: ["txt", "json"]
+      
+    # 通用内容输出设置
+    general:
+      directory_structure: "general/category"
+      filename_pattern: 'general_{timestamp}_{type}'
+      formats: ["txt"]
+      
+  # 合并报告设置
+  merge_reports:
+    enabled: true
+    output_file: "merged_similarity_report"
+    include_categories:
+    - porn
+    - jav
+    - general
 output_dir: output
 proxy:
   bypass_dpi: false

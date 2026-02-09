@@ -37,13 +37,17 @@ echo ""
 echo "[3/5] 开始打包..."
 pyinstaller --clean \
     --onefile \
-    --windowed \
+    --noconsole \
+    --noupx \
     --name "模特查重管理系统" \
     --add-data "core:core" \
     --add-data "gui:gui" \
+    --add-data "docs:docs" \
+    gui/gui.py \
     --hidden-import yaml \
     --hidden-import requests \
     --hidden-import bs4 \
+    --hidden-import beautifulsoup4 \
     --hidden-import lxml \
     --hidden-import selenium \
     --hidden-import selenium.webdriver \
@@ -54,10 +58,13 @@ pyinstaller --clean \
     --hidden-import selenium.webdriver.support.expected_conditions \
     --hidden-import webdriver_manager \
     --hidden-import webdriver_manager.chrome \
+    --hidden-import yt_dlp \
+    --hidden-import yt_dlp.YoutubeDL \
     --hidden-import urllib3 \
     --hidden-import certifi \
     --hidden-import PySocks \
     --hidden-import socks \
+    --hidden-import socket \
     --hidden-import json \
     --hidden-import os \
     --hidden-import time \
@@ -75,9 +82,18 @@ pyinstaller --clean \
     --hidden-import tkinter.filedialog \
     --hidden-import threading \
     --hidden-import queue \
-    --collect-all selenium \
-    --collect-all webdriver_manager \
-    gui/gui.py
+    --hidden-import colorama \
+    --hidden-import python_dateutil \
+    --hidden-import charset_normalizer \
+    --hidden-import core.modules \
+    --hidden-import core.modules.common \
+    --hidden-import core.modules.pronhub \
+    --hidden-import core.modules.pronhub.downloader \
+    --hidden-import core.modules.pronhub.pronhub \
+    --hidden-import core.modules.javdb \
+    --hidden-import core.modules.javdb.scraper \
+    --collect-submodules selenium \
+    --collect-submodules webdriver_manager
 
 if [ $? -ne 0 ]; then
     echo ""
@@ -100,6 +116,18 @@ if [ ! -f "dist/local_dirs.json" ] && [ -f "local_dirs.json" ]; then
     cp local_dirs.json dist/local_dirs.json
     echo "     - local_dirs.json 已复制"
 fi
+if [ ! -f "dist/README.md" ] && [ -f "README.md" ]; then
+    cp README.md dist/README.md
+    echo "     - README.md 已复制"
+fi
+if [ ! -f "dist/requirements.txt" ] && [ -f "requirements.txt" ]; then
+    cp requirements.txt dist/requirements.txt
+    echo "     - requirements.txt 已复制"
+fi
+if [ ! -f "dist/demo_complete_download.py" ] && [ -f "demo_complete_download.py" ]; then
+    cp demo_complete_download.py dist/demo_complete_download.py
+    echo "     - demo_complete_download.py 已复制"
+fi
 echo "     完成!"
 echo ""
 
@@ -113,4 +141,7 @@ echo "提示:"
 echo "1. 首次运行会自动下载 ChromeDriver"
 echo "2. 确保安装了 Chrome 浏览器"
 echo "3. 配置文件会自动生成"
+echo "4. PRONHUB模块支持视频下载功能"
+echo "5. JAVDB模块专注于内容管理，无下载功能"
+echo "6. 支持porn和JAV分类目录配置"
 echo ""

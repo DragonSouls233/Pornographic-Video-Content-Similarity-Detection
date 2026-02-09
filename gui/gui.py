@@ -329,10 +329,16 @@ class ModelManagerGUI:
         action_frame = ttk.Frame(result_frame)
         action_frame.pack(fill=tk.X, pady=(10, 0))
         
-        # 下载按钮
-        ttk.Button(action_frame, text="下载选中视频", command=self.download_selected_videos).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(action_frame, text="下载所有缺失视频", command=self.download_all_missing_videos).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(action_frame, text="完整下载模特目录", command=self.download_complete_model_directories).pack(side=tk.LEFT, padx=(0, 5))
+        # 下载按钮（PRONHUB专用）
+        self.download_selected_btn = ttk.Button(action_frame, text="下载选中视频", command=self.download_selected_videos)
+        self.download_selected_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.download_all_btn = ttk.Button(action_frame, text="下载所有缺失视频", command=self.download_all_missing_videos)
+        self.download_all_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.download_complete_btn = ttk.Button(action_frame, text="完整下载模特目录", command=self.download_complete_model_directories)
+        self.download_complete_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 绑定模块选择变化事件来控制下载按钮
+        self.model_module_var.trace_add('write', self._update_download_buttons_state)
         
         # 导出按钮
         ttk.Button(action_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
@@ -1700,6 +1706,20 @@ class ModelManagerGUI:
         
         messagebox.showinfo("关于", about_text)
     
+    def _update_download_buttons_state(self, *args):
+        """根据选择的模块更新下载按钮状态"""
+        selected_module = self.model_module_var.get()
+        
+        # 如果选择JAVDB模块，禁用所有下载按钮
+        if selected_module == "JAVDB":
+            self.download_selected_btn.config(state=tk.DISABLED)
+            self.download_all_btn.config(state=tk.DISABLED)
+            self.download_complete_btn.config(state=tk.DISABLED)
+        else:
+            self.download_selected_btn.config(state=tk.NORMAL)
+            self.download_all_btn.config(state=tk.NORMAL)
+            self.download_complete_btn.config(state=tk.NORMAL)
+    
     def download_selected_videos(self):
         """下载选中的缺失视频"""
         try:
@@ -1761,6 +1781,7 @@ class ModelManagerGUI:
             from core.modules.pronhub.downloader import PornhubDownloader
             import threading
             import queue
+            import logging
             
             # 创建下载进度对话框
             progress_window = tk.Toplevel(self.root)
@@ -1787,6 +1808,9 @@ class ModelManagerGUI:
                 try:
                     # 获取配置
                     config = self.load_config()
+                    
+                    # 设置日志
+                    logger = logging.getLogger(__name__)
                     
                     # 创建下载器
                     downloader = PornhubDownloader(config)
@@ -1856,9 +1880,9 @@ class ModelManagerGUI:
             progress_window.mainloop()
             
         except ImportError as e:
-            messagebox.showerror("错误", f"下载模块导入失败: {e}\n请确保已安装 yt-dlp: pip install yt-dlp")
+            messagebox.showerror("错误", f"下载模块导入失败: {e}\n\n请确保已安装所有依赖：\npip install yt-dlp requests beautifulsoup4 PyYAML")
         except Exception as e:
-            messagebox.showerror("错误", f"下载失败: {e}")
+            messagebox.showerror("错误", f"下载失败: {e}\n\n请检查网络连接和代理设置")
     
     def download_complete_model_directories(self):
         """完整下载模特目录"""
