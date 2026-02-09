@@ -127,7 +127,7 @@ class ModelManagerGUI:
         
         ttk.Label(search_frame, text="模块: ").pack(side=tk.LEFT)
         self.model_module_var = tk.StringVar(value="全部")
-        module_combobox = ttk.Combobox(search_frame, textvariable=self.model_module_var, values=["全部", "PRONHUB", "JAVDB"], width=10, state="readonly")
+        module_combobox = ttk.Combobox(search_frame, textvariable=self.model_module_var, values=["全部", "PORN", "JAVDB"], width=10, state="readonly")
         module_combobox.pack(side=tk.LEFT, padx=(5, 5))
         module_combobox.bind("<<ComboboxSelected>>", self.filter_models_by_module)
         
@@ -182,7 +182,7 @@ class ModelManagerGUI:
         ttk.Button(action_frame, text="刷新列表", command=self.refresh_models, width=20).pack(fill=tk.X, pady=5)
         
         # 模特数量统计
-        self.model_count_var = tk.StringVar(value="模特数量: 0 (PRONHUB: 0, JAVDB: 0)")
+        self.model_count_var = tk.StringVar(value="模特数量: 0 (PORN: 0, JAVDB: 0)")
         ttk.Label(action_frame, textvariable=self.model_count_var).pack(pady=10)
     
     def init_run_tab(self):
@@ -198,39 +198,40 @@ class ModelManagerGUI:
         # 模块选择
         ttk.Label(config_frame, text="模块选择: ").pack(side=tk.LEFT)
         self.module_var = tk.StringVar(value="auto")
-        module_combobox = ttk.Combobox(config_frame, textvariable=self.module_var, values=["auto", "pronhub", "javdb"], width=10)
+        module_combobox = ttk.Combobox(config_frame, textvariable=self.module_var, values=["auto", "porn", "javdb"], width=10)
         module_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
-        # 本地目录选择
-        ttk.Label(config_frame, text="本地目录: ").pack(anchor=tk.W, pady=2)
-        dir_frame = ttk.Frame(config_frame)
-        dir_frame.pack(fill=tk.X, pady=2)
+        # 本地目录选择 - 分类管理
+        ttk.Label(config_frame, text="本地目录配置:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(10, 5))
         
-        # 目录列表
-        self.dir_listbox = tk.Listbox(dir_frame, width=60, height=3)
-        self.dir_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        # PRON目录配置
+        pron_frame = ttk.LabelFrame(config_frame, text="PRON目录", padding="10")
+        pron_frame.pack(fill=tk.X, pady=5)
         
-        # 滚动条
-        scrollbar = ttk.Scrollbar(dir_frame, orient=tk.VERTICAL, command=self.dir_listbox.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.dir_listbox.configure(yscroll=scrollbar.set)
+        pron_entry_frame = ttk.Frame(pron_frame)
+        pron_entry_frame.pack(fill=tk.X)
         
-        # 按钮框架
-        btn_frame = ttk.Frame(dir_frame, width=100)
-        btn_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
+        ttk.Label(pron_entry_frame, text="模特目录:").pack(side=tk.LEFT)
+        self.pron_dir_var = tk.StringVar()
+        self.pron_dir_entry = ttk.Entry(pron_entry_frame, textvariable=self.pron_dir_var, width=50)
+        self.pron_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        ttk.Button(pron_entry_frame, text="浏览", command=self.browse_pron_dir, width=10).pack(side=tk.RIGHT)
         
-        # 添加目录按钮
-        ttk.Button(btn_frame, text="添加", command=self.add_local_dir, width=10).pack(fill=tk.X, pady=2)
+        # JAV目录配置
+        jav_frame = ttk.LabelFrame(config_frame, text="JAV目录", padding="10")
+        jav_frame.pack(fill=tk.X, pady=5)
         
-        # 删除目录按钮
-        ttk.Button(btn_frame, text="删除", command=self.remove_local_dir, width=10).pack(fill=tk.X, pady=2)
+        jav_entry_frame = ttk.Frame(jav_frame)
+        jav_entry_frame.pack(fill=tk.X)
         
-        # 加载保存的目录列表
+        ttk.Label(jav_entry_frame, text="模特目录:").pack(side=tk.LEFT)
+        self.jav_dir_var = tk.StringVar()
+        self.jav_dir_entry = ttk.Entry(jav_entry_frame, textvariable=self.jav_dir_var, width=50)
+        self.jav_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        ttk.Button(jav_entry_frame, text="浏览", command=self.browse_jav_dir, width=10).pack(side=tk.RIGHT)
+        
+        # 加载保存的目录配置
         self.load_local_dirs()
-        # 如果没有保存的目录，添加默认目录
-        if self.dir_listbox.size() == 0:
-            self.dir_listbox.insert(tk.END, "F:\\作品")
-            self.save_local_dirs()
         
         # 抓取工具选择（固定为selenium）
         ttk.Label(config_frame, text="抓取工具: ").pack(side=tk.LEFT)
@@ -258,27 +259,96 @@ class ModelManagerGUI:
         self.stop_button = ttk.Button(run_frame, text="停止运行", command=self.stop_run, width=20, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT)
         
-        # 进度显示
-        progress_frame = ttk.LabelFrame(frame, text="运行进度", padding="10")
-        progress_frame.pack(fill=tk.BOTH, expand=True)
+        # 进度显示区域
+        progress_container = ttk.Frame(frame)
+        progress_container.pack(fill=tk.BOTH, expand=True)
         
-        # 进度条
+        # 查重进度区域
+        scan_progress_frame = ttk.LabelFrame(progress_container, text="查重进度", padding="10")
+        scan_progress_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # 查重进度条
         self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, pady=(0, 10))
+        self.progress_bar = ttk.Progressbar(scan_progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X, pady=(0, 5))
         
-        # 状态信息
+        # 查重状态信息
         self.status_var = tk.StringVar(value="就绪")
-        ttk.Label(progress_frame, textvariable=self.status_var, font=("SimHei", 10)).pack(anchor=tk.W, pady=2)
+        ttk.Label(scan_progress_frame, textvariable=self.status_var, font=("SimHei", 10)).pack(anchor=tk.W, pady=2)
         
-        # 日志显示
-        self.log_text = tk.Text(progress_frame, height=15, wrap=tk.WORD)
+        # 下载进度区域
+        download_progress_frame = ttk.LabelFrame(progress_container, text="下载进度", padding="10")
+        download_progress_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        
+        # 下载详细信息框架
+        download_info_frame = ttk.Frame(download_progress_frame)
+        download_info_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # 下载速度和状态
+        speed_status_frame = ttk.Frame(download_info_frame)
+        speed_status_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(speed_status_frame, text="下载速度:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        self.download_speed_var = tk.StringVar(value="0 KB/s")
+        ttk.Label(speed_status_frame, textvariable=self.download_speed_var, font=("SimHei", 9)).pack(side=tk.LEFT)
+        
+        ttk.Label(speed_status_frame, text="当前文件:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(20, 10))
+        self.current_file_var = tk.StringVar(value="无")
+        ttk.Label(speed_status_frame, textvariable=self.current_file_var, font=("SimHei", 9)).pack(side=tk.LEFT)
+        
+        # 下载进度条和统计
+        download_stats_frame = ttk.Frame(download_info_frame)
+        download_stats_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(download_stats_frame, text="下载进度:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        self.download_progress_var = tk.DoubleVar(value=0)
+        self.download_progress_bar = ttk.Progressbar(download_stats_frame, variable=self.download_progress_var, maximum=100, length=200)
+        self.download_progress_bar.pack(side=tk.LEFT, padx=(5, 10))
+        
+        self.download_percentage_var = tk.StringVar(value="0%")
+        ttk.Label(download_stats_frame, textvariable=self.download_percentage_var, font=("SimHei", 9, "bold")).pack(side=tk.LEFT)
+        
+        # 下载统计信息
+        download_count_frame = ttk.Frame(download_info_frame)
+        download_count_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(download_count_frame, text="已下载:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        self.downloaded_count_var = tk.StringVar(value="0")
+        ttk.Label(download_count_frame, textvariable=self.downloaded_count_var, font=("SimHei", 9)).pack(side=tk.LEFT)
+        
+        ttk.Label(download_count_frame, text="总大小:", font=("SimHei", 9, "bold")).pack(side=tk.LEFT, padx=(20, 10))
+        self.total_size_var = tk.StringVar(value="0 MB")
+        ttk.Label(download_count_frame, textvariable=self.total_size_var, font=("SimHei", 9)).pack(side=tk.LEFT)
+        
+        # 下载日志区域
+        download_log_frame = ttk.Frame(download_progress_frame)
+        download_log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(download_log_frame, text="下载日志:", font=("SimHei", 9, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        
+        self.download_log_text = tk.Text(download_log_frame, height=8, wrap=tk.WORD, font=("Consolas", 9))
+        self.download_log_text.pack(fill=tk.BOTH, expand=True)
+        
+        # 下载日志滚动条
+        download_scrollbar = ttk.Scrollbar(download_log_frame, orient=tk.VERTICAL, command=self.download_log_text.yview)
+        self.download_log_text.configure(yscroll=download_scrollbar.set)
+        download_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 查重日志显示
+        log_frame = ttk.LabelFrame(progress_container, text="查重日志", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        
+        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, font=("Consolas", 9))
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
         # 添加滚动条
-        scrollbar = ttk.Scrollbar(progress_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 下载控制变量
+        self.downloading = False
+        self.download_cancelled = False
     
     def init_result_tab(self):
         """初始化结果显示标签页"""
@@ -329,7 +399,7 @@ class ModelManagerGUI:
         action_frame = ttk.Frame(result_frame)
         action_frame.pack(fill=tk.X, pady=(10, 0))
         
-        # 下载按钮（PRONHUB专用）
+        # 下载按钮（PORN专用）
         self.download_selected_btn = ttk.Button(action_frame, text="下载选中视频", command=self.download_selected_videos)
         self.download_selected_btn.pack(side=tk.LEFT, padx=(0, 5))
         self.download_all_btn = ttk.Button(action_frame, text="下载所有缺失视频", command=self.download_all_missing_videos)
@@ -639,14 +709,14 @@ class ModelManagerGUI:
                 if isinstance(value, str):
                     # 旧格式：{model_name: url}
                     # 根据URL自动判断模块类型
-                    module = "JAVDB" if "javdb" in value.lower() else "PRONHUB"
+                    module = "JAVDB" if "javdb" in value.lower() else "PORN"
                     new_data[key] = {
                         "module": module,
                         "url": value
                     }
                     migrated = True
                 elif isinstance(value, dict):
-                    # 新格式：{model_name: {"module": "PRONHUB/JAVDB", "url": "..."}}
+                    # 新格式：{model_name: {"module": "PORN/JAVDB", "url": "..."}}
                     new_data[key] = value
             
             # 如果发生了迁移，保存新格式
@@ -679,7 +749,7 @@ class ModelManagerGUI:
             self.model_tree.delete(item)
         
         # 统计各模块数量
-        pronhub_count = 0
+        porn_count = 0
         javdb_count = 0
         
         # 添加模特数据
@@ -689,8 +759,8 @@ class ModelManagerGUI:
                 url = model_info.get("url", "")
                 
                 # 统计
-                if module == "PRONHUB":
-                    pronhub_count += 1
+                if module == "PORN":
+                    porn_count += 1
                 else:
                     javdb_count += 1
                 
@@ -700,7 +770,7 @@ class ModelManagerGUI:
                     self.model_tree.insert("", tk.END, values=(model_name, module, url))
         
         # 更新统计信息
-        self.model_count_var.set(f"模特数量: {len(self.models)} (PRONHUB: {pronhub_count}, JAVDB: {javdb_count})")
+        self.model_count_var.set(f"模特数量: {len(self.models)} (PORN: {porn_count}, JAVDB: {javdb_count})")
     
     def filter_models_by_module(self, event=None):
         """根据模块筛选模特"""
@@ -753,7 +823,7 @@ class ModelManagerGUI:
         # 模块选择
         ttk.Label(frame, text="模块类型: ").grid(row=1, column=0, sticky=tk.W, pady=10)
         module_var = tk.StringVar(value="JAVDB")
-        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PRONHUB", "JAVDB"], width=37, state="readonly")
+        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PORN", "JAVDB"], width=37, state="readonly")
         module_combobox.grid(row=1, column=1, sticky=tk.W, pady=10)
         
         # 链接
@@ -782,8 +852,8 @@ class ModelManagerGUI:
             if module == "JAVDB" and "javdb" not in url.lower():
                 if not messagebox.askyesno("警告", f"选择的模块是JAVDB，但链接中不包含'javdb'。\n\n确定要继续吗？"):
                     return
-            elif module == "PRONHUB" and "javdb" in url.lower():
-                if not messagebox.askyesno("警告", f"选择的模块是PRONHUB，但链接中包含'javdb'。\n\n确定要继续吗？"):
+            elif module == "PORN" and "javdb" in url.lower():
+                if not messagebox.askyesno("警告", f"选择的模块是PORN，但链接中包含'javdb'。\n\n确定要继续吗？"):
                     return
             
             # 添加到模型字典（新格式）
@@ -948,7 +1018,7 @@ class ModelManagerGUI:
         # 模块选择
         ttk.Label(frame, text="模块类型: ").grid(row=1, column=0, sticky=tk.W, pady=10)
         module_var = tk.StringVar(value=module)
-        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PRONHUB", "JAVDB"], width=37, state="readonly")
+        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PORN", "JAVDB"], width=37, state="readonly")
         module_combobox.grid(row=1, column=1, sticky=tk.W, pady=10)
         
         # 链接
@@ -977,8 +1047,8 @@ class ModelManagerGUI:
             if new_module == "JAVDB" and "javdb" not in new_url.lower():
                 if not messagebox.askyesno("警告", f"选择的模块是JAVDB，但链接中不包含'javdb'。\n\n确定要继续吗？"):
                     return
-            elif new_module == "PRONHUB" and "javdb" in new_url.lower():
-                if not messagebox.askyesno("警告", f"选择的模块是PRONHUB，但链接中包含'javdb'。\n\n确定要继续吗？"):
+            elif new_module == "PORN" and "javdb" in new_url.lower():
+                if not messagebox.askyesno("警告", f"选择的模块是PORN，但链接中包含'javdb'。\n\n确定要继续吗？"):
                     return
             
             # 更新模型字典
@@ -1647,47 +1717,54 @@ class ModelManagerGUI:
         
         messagebox.showinfo("使用说明", help_text)
     
-    def add_local_dir(self):
-        """添加本地目录"""
-        directory = filedialog.askdirectory(title="选择本地视频目录")
+    def browse_pron_dir(self):
+        """浏览PRON目录"""
+        directory = filedialog.askdirectory(title="选择PRON模特目录")
         if directory:
-            # 检查目录是否已存在
-            for i in range(self.dir_listbox.size()):
-                if self.dir_listbox.get(i) == directory:
-                    messagebox.showinfo("提示", "该目录已存在于列表中")
-                    return
-            # 添加到列表
-            self.dir_listbox.insert(tk.END, directory)
-            # 保存目录列表
+            self.pron_dir_var.set(directory)
+            self.save_local_dirs()
+    
+    def browse_jav_dir(self):
+        """浏览JAV目录"""
+        directory = filedialog.askdirectory(title="选择JAV模特目录")
+        if directory:
+            self.jav_dir_var.set(directory)
             self.save_local_dirs()
     
     def save_local_dirs(self):
-        """保存本地目录列表"""
+        """保存本地目录配置"""
         try:
-            dirs = [self.dir_listbox.get(i) for i in range(self.dir_listbox.size())]
+            dirs_config = {
+                "pron": self.pron_dir_var.get().strip() if self.pron_dir_var.get() else "",
+                "jav": self.jav_dir_var.get().strip() if self.jav_dir_var.get() else ""
+            }
             with open("local_dirs.json", "w", encoding="utf-8") as f:
-                json.dump(dirs, f, ensure_ascii=False, indent=2)
+                json.dump(dirs_config, f, ensure_ascii=False, indent=2)
         except Exception as e:
             pass
     
     def load_local_dirs(self):
-        """加载本地目录列表"""
+        """加载本地目录配置"""
         try:
             if os.path.exists("local_dirs.json"):
                 with open("local_dirs.json", "r", encoding="utf-8") as f:
-                    dirs = json.load(f)
-                    for directory in dirs:
-                        self.dir_listbox.insert(tk.END, directory)
+                    dirs_config = json.load(f)
+                    # 兼容旧版本格式
+                    if isinstance(dirs_config, list):
+                        # 旧版本，尝试转换为分类格式
+                        pron_dirs = [d for d in dirs_config if "pron" in d.lower() or "western" in d.lower()]
+                        jav_dirs = [d for d in dirs_config if "jav" in d.lower() or "japanese" in d.lower()]
+                        
+                        self.pron_dir_var.set(pron_dirs[0] if pron_dirs else "")
+                        self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
+                    else:
+                        # 新版本格式
+                        self.pron_dir_var.set(dirs_config.get("pron", ""))
+                        self.jav_dir_var.set(dirs_config.get("jav", ""))
         except Exception as e:
-            pass
-    
-    def remove_local_dir(self):
-        """删除选中的本地目录"""
-        selected = self.dir_listbox.curselection()
-        if selected:
-            self.dir_listbox.delete(selected)
-            # 保存目录列表
-            self.save_local_dirs()
+            # 设置默认值
+            self.pron_dir_var.set("F:/作品/Porn")
+            self.jav_dir_var.set("F:/作品/JAV")
     
     def show_about(self):
         """显示关于信息"""
@@ -1726,7 +1803,7 @@ class ModelManagerGUI:
             # 获取选中的项目
             selected_items = self.result_tree.selection()
             if not selected_items:
-                messagebox.showwarning("提示", "请先选择要下载的视频")
+                self.add_log("请先选择要下载的视频")
                 return
             
             # 收集下载信息
@@ -1737,18 +1814,15 @@ class ModelManagerGUI:
                     download_items.append((model, title, url.strip()))
             
             if not download_items:
-                messagebox.showwarning("提示", "选中的项目没有有效的下载链接")
+                self.add_log("选中的项目没有有效的下载链接")
                 return
             
-            # 确认下载
-            if not messagebox.askyesno("确认下载", f"确定要下载选中的 {len(download_items)} 个视频吗？"):
-                return
-            
-            # 开始下载
+            # 开始下载（无需确认）
+            self.add_log(f"开始下载选中的 {len(download_items)} 个视频")
             self._download_videos(download_items)
             
         except Exception as e:
-            messagebox.showerror("错误", f"下载失败: {e}")
+            self.add_log(f"下载失败: {e}")
     
     def download_all_missing_videos(self):
         """下载所有缺失视频"""
@@ -1761,47 +1835,39 @@ class ModelManagerGUI:
                     download_items.append((model, title, url.strip()))
             
             if not download_items:
-                messagebox.showwarning("提示", "没有可下载的视频")
-                return
-            
-            # 确认下载
-            if not messagebox.askyesno("确认下载", f"确定要下载所有 {len(download_items)} 个缺失视频吗？\n注意：这可能需要很长时间！"):
+                self.add_log("没有可下载的视频")
                 return
             
             # 开始下载
+            self.add_log(f"开始下载所有 {len(download_items)} 个缺失视频")
             self._download_videos(download_items)
             
         except Exception as e:
-            messagebox.showerror("错误", f"下载失败: {e}")
+            self.add_log(f"下载失败: {e}")
     
     def _download_videos(self, download_items):
-        """执行视频下载"""
+        """内置GUI显示的下载函数"""
         try:
             # 导入下载模块
-            from core.modules.pronhub.downloader import PornhubDownloader
+            from core.modules.porn.downloader import PornDownloader
             import threading
-            import queue
             import logging
             
-            # 创建下载进度对话框
-            progress_window = tk.Toplevel(self.root)
-            progress_window.title("下载进度")
-            progress_window.geometry("600x400")
-            progress_window.transient(self.root)
-            progress_window.grab_set()
+            # 初始化下载状态
+            self.is_downloading = True
+            self.download_cancelled = False
             
-            # 进度显示
-            ttk.Label(progress_window, text="下载进度:", font=("Arial", 12, "bold")).pack(pady=10)
+            # 重置下载统计
+            self.downloaded_count_var.set("0")
+            self.total_count_var.set(str(len(download_items)))
+            self.download_progress_var.set(0)
+            self.download_percentage_var.set("0%")
+            self.download_speed_var.set("0 KB/s")
+            self.current_file_var.set("准备开始...")
             
-            progress_text = tk.Text(progress_window, height=15, width=70)
-            progress_scrollbar = ttk.Scrollbar(progress_window, orient=tk.VERTICAL, command=progress_text.yview)
-            progress_text.configure(yscrollcommand=progress_scrollbar.set)
-            
-            progress_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-            progress_scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
-            
-            # 进度队列
-            progress_queue = queue.Queue()
+            # 清空下载日志
+            self.download_log_text.delete('1.0', tk.END)
+            self.add_download_log("开始下载任务，共 " + str(len(download_items)) + " 个视频")
             
             def download_worker():
                 """下载工作线程"""
@@ -1813,12 +1879,20 @@ class ModelManagerGUI:
                     logger = logging.getLogger(__name__)
                     
                     # 创建下载器
-                    downloader = PornhubDownloader(config)
+                    downloader = PornDownloader(config)
                     
                     total_count = len(download_items)
+                    downloaded_count = 0
+                    
                     for i, (model, title, url) in enumerate(download_items, 1):
+                        if self.download_cancelled:
+                            self.add_download_log("下载已取消")
+                            break
+                            
                         try:
-                            progress_queue.put(f"开始下载 ({i}/{total_count}): {title[:50]}...")
+                            # 更新当前文件信息
+                            self.current_file_var.set(f"({i}/{total_count}) {title[:50]}...")
+                            self.add_download_log(f"开始下载 ({i}/{total_count}): {title[:50]}...")
                             
                             # 确定保存目录（模特目录）
                             save_dir = None
@@ -1829,55 +1903,83 @@ class ModelManagerGUI:
                                         save_dir = result_value.local_folder_full
                                     break
                             
+                            # 创建进度钩子函数
+                            def progress_hook(d):
+                                if not self.is_downloading or self.download_cancelled:
+                                    return
+                                    
+                                if d['status'] == 'downloading':
+                                    # 计算下载速度
+                                    speed_bytes = d.get('speed', 0)
+                                    if speed_bytes:
+                                        speed_str = self._format_bytes(speed_bytes) + "/s"
+                                        self.download_speed_var.set(speed_str)
+                                    else:
+                                        self.download_speed_var.set("0 KB/s")
+                                    
+                                    # 计算进度百分比
+                                    total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                                    downloaded_bytes = d.get('downloaded_bytes', 0)
+                                    
+                                    if total_bytes > 0:
+                                        percentage = (downloaded_bytes / total_bytes) * 100
+                                        # 计算整体进度（包括已完成的文件）
+                                        overall_percentage = ((downloaded_count + (percentage / 100.0)) / total_count) * 100
+                                        self.download_progress_var.set(overall_percentage)
+                                        self.download_percentage_var.set(f"{overall_percentage:.1f}%")
+                                        
+                                        # 更新总大小显示
+                                        total_size_mb = self._format_bytes(total_bytes)
+                                        downloaded_mb = self._format_bytes(downloaded_bytes)
+                                        self.total_size_var.set(f"{downloaded_mb}/{total_size_mb}")
+                                        
+                                elif d['status'] == 'finished':
+                                    downloaded_mb = self._format_bytes(d.get('total_bytes', 0))
+                                    self.add_download_log(f"文件下载完成: {d.get('filename', 'unknown')} ({downloaded_mb})")
+                                    
+                            # 配置下载器进度钩子
+                            if hasattr(downloader, 'ydl_opts'):
+                                downloader.ydl_opts['progress_hooks'] = [progress_hook]
+                            
                             # 执行下载
                             result = downloader.download_single_video(url, save_dir)
                             
                             if result['success']:
-                                progress_queue.put(f"✅ 下载成功: {title[:50]}... -> {result.get('file_path', 'N/A')}")
+                                downloaded_count += 1
+                                self.downloaded_count_var.set(str(downloaded_count))
+                                
+                                # 更新整体进度
+                                overall_percentage = (downloaded_count / total_count) * 100
+                                self.download_progress_var.set(overall_percentage)
+                                self.download_percentage_var.set(f"{overall_percentage:.1f}%")
+                                
+                                file_path = result.get('file_path', 'N/A')
+                                self.add_download_log(f"✅ 下载成功: {title[:50]}...")
+                                self.add_download_log(f"   保存路径: {file_path}")
                             else:
-                                progress_queue.put(f"❌ 下载失败: {title[:50]}... - {result.get('message', result.get('error', 'Unknown error'))}")
+                                error_msg = result.get('message', result.get('error', 'Unknown error'))
+                                self.add_download_log(f"❌ 下载失败: {title[:50]}... - {error_msg}")
                             
                         except Exception as e:
-                            progress_queue.put(f"❌ 下载异常: {title[:50]}... - {str(e)}")
+                            self.add_download_log(f"❌ 下载异常: {title[:50]}... - {str(e)}")
                     
-                    progress_queue.put("下载任务完成！")
+                    if not self.download_cancelled:
+                        self.add_download_log("🎉 下载任务完成！")
+                        self.download_percentage_var.set("100%")
+                    else:
+                        self.add_download_log("⏹️ 下载已停止")
                     
                 except Exception as e:
-                    progress_queue.put(f"下载器错误: {str(e)}")
+                    self.add_download_log(f"❌ 下载器错误: {str(e)}")
                 finally:
-                    progress_queue.put("DOWNLOAD_COMPLETE")
-            
-            def update_progress():
-                """更新进度显示"""
-                try:
-                    while True:
-                        try:
-                            message = progress_queue.get_nowait()
-                            if message == "DOWNLOAD_COMPLETE":
-                                ttk.Button(progress_window, text="关闭", command=progress_window.destroy).pack(pady=10)
-                                break
-                            else:
-                                progress_text.insert(tk.END, message + "\n")
-                                progress_text.see(tk.END)
-                                progress_window.update()
-                        except queue.Empty:
-                            break
-                    
-                    # 继续检查进度
-                    if progress_window.winfo_exists():
-                        progress_window.after(100, update_progress)
-                except:
-                    pass
+                    self.is_downloading = False
+                    self.download_cancelled = False
+                    self.current_file_var.set("下载完成")
+                    self.download_speed_var.set("0 KB/s")
             
             # 启动下载线程
             download_thread = threading.Thread(target=download_worker, daemon=True)
             download_thread.start()
-            
-            # 启动进度更新
-            update_progress()
-            
-            # 显示窗口
-            progress_window.mainloop()
             
         except ImportError as e:
             messagebox.showerror("错误", f"下载模块导入失败: {e}\n\n请确保已安装所有依赖：\npip install yt-dlp requests beautifulsoup4 PyYAML")
@@ -1991,7 +2093,7 @@ class ModelManagerGUI:
         """执行完整目录下载"""
         try:
             # 导入批量下载函数
-            from core.modules.pronhub.downloader import batch_download_models
+            from core.modules.porn.downloader import batch_download_models
             import threading
             import queue
             
@@ -2225,6 +2327,39 @@ class ModelManagerGUI:
         # 切换到浏览器/代理测试标签页
         self.notebook.select(self.browser_proxy_tab)
         messagebox.showinfo("提示", "已切换到浏览器/代理测试标签页")
+    
+    def add_download_log(self, message):
+        """添加下载日志消息"""
+        try:
+            timestamp = time.strftime("%H:%M:%S")
+            self.download_log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+            self.download_log_text.see(tk.END)
+            self.root.update_idletasks()
+        except Exception as e:
+            print(f"添加下载日志失败: {e}")
+    
+    def cancel_download(self):
+        """取消下载"""
+        if self.is_downloading:
+            self.download_cancelled = True
+            self.add_download_log("正在取消下载...")
+            messagebox.showinfo("提示", "下载取消请求已发送，请等待当前任务完成")
+        else:
+            messagebox.showinfo("提示", "当前没有正在进行的下载任务")
+    
+    def _format_bytes(self, bytes_value):
+        """格式化字节数为可读格式"""
+        try:
+            if bytes_value is None or bytes_value == 0:
+                return "0 B"
+            
+            for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+                if bytes_value < 1024.0:
+                    return f"{bytes_value:.1f} {unit}"
+                bytes_value /= 1024.0
+            return f"{bytes_value:.1f} PB"
+        except:
+            return "0 B"
 
 if __name__ == "__main__":
     root = tk.Tk()

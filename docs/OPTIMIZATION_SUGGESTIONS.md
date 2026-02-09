@@ -688,11 +688,11 @@ class ScraperPlugin:
 
 # 使用插件
 manager = PluginManager()
-manager.register_plugin('pronhub', PronhubPlugin)
+manager.register_plugin('porn', PornPlugin)
 manager.register_plugin('javdb', JavdbPlugin)
 
 # 动态加载
-plugin = manager.get_plugin('pronhub')(config)
+plugin = manager.get_plugin('porn')(config)
 titles = plugin.fetch(url)
 ```
 

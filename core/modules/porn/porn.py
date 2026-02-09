@@ -7,10 +7,10 @@ from typing import Set, Dict, List, Tuple
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-# --- PRONHUB特定功能 ---
-def fetch_with_requests_pronhub(url: str, logger, max_pages: int = -1, config: dict = None,
+# --- PORN特定功能 ---
+def fetch_with_requests_porn(url: str, logger, max_pages: int = -1, config: dict = None,
                                 smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
-    """PRONHUB专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页（支持增量更新）"""
+    """PORN专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页（支持增量更新）"""
     if config is None:
         config = {}
     
@@ -20,22 +20,22 @@ def fetch_with_requests_pronhub(url: str, logger, max_pages: int = -1, config: d
     
     if use_selenium or scraper == 'selenium':
         try:
-            return fetch_with_selenium_pronhub(url, logger, max_pages, config, smart_cache, model_name)
+            return fetch_with_selenium_porn(url, logger, max_pages, config, smart_cache, model_name)
         except Exception as e:
-            logger.warning(f"  PRONHUB - Selenium 抓取失败，回退到 requests: {e}")
+            logger.warning(f"  PORN - Selenium 抓取失败，回退到 requests: {e}")
             # 回退到 requests
-            return fetch_with_requests_only_pronhub(url, logger, max_pages, config, smart_cache, model_name)
+            return fetch_with_requests_only_porn(url, logger, max_pages, config, smart_cache, model_name)
     else:
-        return fetch_with_requests_only_pronhub(url, logger, max_pages, config, smart_cache, model_name)
+        return fetch_with_requests_only_porn(url, logger, max_pages, config, smart_cache, model_name)
 
 
-def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: dict = None,
+def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict = None,
                                 smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
-    """使用 Selenium 抓取 PRONHUB 视频（支持增量更新）"""
+    """使用 Selenium 抓取 PORN 视频（支持增量更新）"""
     try:
         from ..common.selenium_helper import SeleniumHelper
     except ImportError:
-        logger.error("  PRONHUB - Selenium 助手模块未找到")
+        logger.error("  PORN - Selenium 助手模块未找到")
         raise
     
     all_titles = set()
@@ -49,7 +49,7 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
             # 加载已缓存的标题
             cached_titles = smart_cache.get_cached_titles(model_name)
             all_titles.update(cached_titles)
-            logger.info(f"  PRONHUB - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
+            logger.info(f"  PORN - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
     
     page_num = start_page
     consecutive_empty_pages = 0
@@ -60,13 +60,13 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
         selenium = SeleniumHelper(config)
         selenium.driver = selenium.setup_driver()
         
-        logger.info("  PRONHUB - 使用 Selenium 模式抓取")
+        logger.info("  PORN - 使用 Selenium 模式抓取")
         
         while True:
             # 检查该页是否需要更新（智能缓存）
             if smart_cache and model_name and page_num < start_page + 3:  # 只检查前3页
                 if not smart_cache.should_update_page(model_name, page_num):
-                    logger.debug(f"  PRONHUB - 第 {page_num} 页在缓存有效期内，跳过")
+                    logger.debug(f"  PORN - 第 {page_num} 页在缓存有效期内，跳过")
                     page_num += 1
                     continue
             
@@ -78,11 +78,11 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
                 else:
                     page_url = f"{url}?page={page_num}"
             
-            logger.info(f"  PRONHUB - Selenium 抓取第 {page_num} 页: {page_url}")
+            logger.info(f"  PORN - Selenium 抓取第 {page_num} 页: {page_url}")
             
             # 访问页面
             if not selenium.get_page(page_url, wait_element='a.thumbnailTitle, .title, .video-title', wait_timeout=15):
-                logger.warning(f"  PRONHUB - Selenium 页面加载失败")
+                logger.warning(f"  PORN - Selenium 页面加载失败")
                 break
             
             # 随机延时
@@ -96,11 +96,11 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
             page_titles = set()
             page_videos = []  # 用于智能缓存
             
-            # 选择器1: PRONHUB特有的视频标题选择器
+            # 选择器1: PORN特有的视频标题选择器
             for elem in soup.select('a.thumbnailTitle'):
                 title = elem.get_text(strip=True)
                 if title and len(title) > 3:
-                    cleaned_title = clean_pronhub_title(title, config.get('filename_clean_patterns', []))
+                    cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                     page_titles.add(cleaned_title)
                     video_url = elem.get('href')
                     if video_url:
@@ -114,7 +114,7 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
                 for elem in soup.select('.title, .video-title, h3.title'):
                     title = elem.get_text(strip=True)
                     if title and len(title) > 3:
-                        cleaned_title = clean_pronhub_title(title, config.get('filename_clean_patterns', []))
+                        cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
                         link_elem = elem.find_parent('a')
                         if link_elem:
@@ -130,7 +130,7 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
                 all_titles.update(page_titles)
                 new_titles = len(all_titles) - prev_count
                 
-                logger.info(f"  PRONHUB - Selenium 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
+                logger.info(f"  PORN - Selenium 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
                 
                 # 更新智能缓存
                 if smart_cache and model_name:
@@ -145,10 +145,10 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
                 
                 consecutive_empty_pages = 0
             else:
-                logger.warning(f"  PRONHUB - Selenium 第 {page_num} 页未找到视频标题")
+                logger.warning(f"  PORN - Selenium 第 {page_num} 页未找到视频标题")
                 consecutive_empty_pages += 1
                 if consecutive_empty_pages >= 2:
-                    logger.info("  PRONHUB - 连续2页无数据，停止抓取")
+                    logger.info("  PORN - 连续2页无数据，停止抓取")
                     break
             
             # 检查是否有下一页
@@ -161,7 +161,7 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
                     break
             
             if not has_next:
-                logger.info("  PRONHUB - Selenium 没有下一页，停止抓取")
+                logger.info("  PORN - Selenium 没有下一页，停止抓取")
                 # 标记完整抓取完成
                 if smart_cache and model_name:
                     smart_cache.mark_full_fetch_completed(model_name, page_num)
@@ -169,25 +169,25 @@ def fetch_with_selenium_pronhub(url: str, logger, max_pages: int = -1, config: d
             
             # 检查最大页数
             if max_pages > 0 and page_num >= max_pages:
-                logger.info(f"  PRONHUB - Selenium 达到最大页数限制 {max_pages}，停止抓取")
+                logger.info(f"  PORN - Selenium 达到最大页数限制 {max_pages}，停止抓取")
                 break
             
             page_num += 1
         
     except Exception as e:
-        logger.error(f"  PRONHUB - Selenium 抓取失败: {e}")
+        logger.error(f"  PORN - Selenium 抓取失败: {e}")
         raise
     finally:
         if selenium:
             selenium.close()
     
-    logger.info(f"  PRONHUB - Selenium 总共提取到 {len(all_titles)} 个视频标题")
+    logger.info(f"  PORN - Selenium 总共提取到 {len(all_titles)} 个视频标题")
     return all_titles, title_to_url
 
 
-def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, config: dict = None,
+def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config: dict = None,
                                      smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
-    """使用 requests 抓取 PRONHUB 视频（支持增量更新）"""
+    """使用 requests 抓取 PORN 视频（支持增量更新）"""
     if config is None:
         config = {}
     headers = {
@@ -209,7 +209,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
             proxies['http'] = http_proxy
         if https_proxy:
             proxies['https'] = https_proxy
-        logger.info(f"  PRONHUB - 使用代理: {proxies}")
+        logger.info(f"  PORN - 使用代理: {proxies}")
     
     all_titles = set()
     title_to_url = {}
@@ -222,7 +222,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
             # 加载已缓存的标题
             cached_titles = smart_cache.get_cached_titles(model_name)
             all_titles.update(cached_titles)
-            logger.info(f"  PRONHUB - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
+            logger.info(f"  PORN - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
     
     page_num = start_page
     consecutive_empty_pages = 0
@@ -232,7 +232,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
             # 检查该页是否需要更新（智能缓存）
             if smart_cache and model_name and page_num < start_page + 3:  # 只检查前3页
                 if not smart_cache.should_update_page(model_name, page_num):
-                    logger.debug(f"  PRONHUB - 第 {page_num} 页在缓存有效期内，跳过")
+                    logger.debug(f"  PORN - 第 {page_num} 页在缓存有效期内，跳过")
                     page_num += 1
                     continue
             
@@ -246,7 +246,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
             
             # 确保URL编码正确
             page_url = page_url.replace(' ', '%20')
-            logger.info(f"  PRONHUB - 抓取第 {page_num} 页: {page_url}")
+            logger.info(f"  PORN - 抓取第 {page_num} 页: {page_url}")
             
             # 随机延时
             time.sleep(random.uniform(1.5, 3.0))
@@ -261,16 +261,16 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
                 
                 soup = BeautifulSoup(resp.text, 'html.parser')
                 
-                # PRONHUB特定的选择器
+                # PORN特定的选择器
                 page_titles = set()
                 page_videos = []  # 用于智能缓存 [(title, url), ...]
                 
-                # 选择器1: PRONHUB特有的视频标题选择器
+                # 选择器1: PORN特有的视频标题选择器
                 for elem in soup.select('a.thumbnailTitle'):
                     title = elem.get_text(strip=True)
                     if title and len(title) > 3:
                         # 对在线标题应用清理流程
-                        cleaned_title = clean_pronhub_title(title, config.get('filename_clean_patterns', []))
+                        cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
                         video_url = elem.get('href')
                         if video_url:
@@ -284,7 +284,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
                     for elem in soup.select('.title, .video-title, h3.title'):
                         title = elem.get_text(strip=True)
                         if title and len(title) > 3:
-                            cleaned_title = clean_pronhub_title(title, config.get('filename_clean_patterns', []))
+                            cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                             page_titles.add(cleaned_title)
                             # 尝试找到父链接
                             link_elem = elem.find_parent('a')
@@ -301,7 +301,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
                     all_titles.update(page_titles)
                     new_titles = len(all_titles) - prev_count
                     
-                    logger.info(f"  PRONHUB - 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
+                    logger.info(f"  PORN - 第 {page_num} 页提取到 {len(page_titles)} 个标题（新增 {new_titles} 个）")
                     
                     # 更新智能缓存
                     if smart_cache and model_name:
@@ -317,17 +317,17 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
                     
                     consecutive_empty_pages = 0
                 else:
-                    logger.warning(f"  PRONHUB - 第 {page_num} 页未找到视频标题")
+                    logger.warning(f"  PORN - 第 {page_num} 页未找到视频标题")
                     consecutive_empty_pages += 1
                     # 如果连续2页没有标题，停止
                     if consecutive_empty_pages >= 2:
-                        logger.info("  PRONHUB - 连续2页无数据，停止抓取")
+                        logger.info("  PORN - 连续2页无数据，停止抓取")
                         break
                 
                 # 检查是否有下一页
                 has_next = False
                 
-                # PRONHUB特定的分页检查
+                # PORN特定的分页检查
                 next_buttons = soup.select('a.next, a[rel="next"], li.next a, .pagination_next, .orangeButton')
                 if next_buttons:
                     for button in next_buttons:
@@ -367,7 +367,7 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
                                 has_next = True
                 
                 if not has_next:
-                    logger.info("  PRONHUB - 没有下一页，停止抓取")
+                    logger.info("  PORN - 没有下一页，停止抓取")
                     # 标记完整抓取完成
                     if smart_cache and model_name:
                         smart_cache.mark_full_fetch_completed(model_name, page_num)
@@ -375,41 +375,41 @@ def fetch_with_requests_only_pronhub(url: str, logger, max_pages: int = -1, conf
                 
                 # 检查最大页数
                 if max_pages > 0 and page_num >= max_pages:
-                    logger.info(f"  PRONHUB - 达到最大页数限制 {max_pages}，停止抓取")
+                    logger.info(f"  PORN - 达到最大页数限制 {max_pages}，停止抓取")
                     break
                 
                 page_num += 1
                 
             except requests.exceptions.RequestException as e:
-                logger.error(f"  PRONHUB - 第 {page_num} 页请求失败: {e}")
+                logger.error(f"  PORN - 第 {page_num} 页请求失败: {e}")
                 break
                 
     except Exception as e:
-        logger.error(f"  PRONHUB - Requests抓取失败: {e}")
+        logger.error(f"  PORN - Requests抓取失败: {e}")
     
-    logger.info(f"  PRONHUB - 总共提取到 {len(all_titles)} 个视频标题")
+    logger.info(f"  PORN - 总共提取到 {len(all_titles)} 个视频标题")
     return all_titles, title_to_url
 
-def clean_pronhub_title(title: str, patterns: List[str]) -> str:
-    """清理PRONHUB视频标题"""
+def clean_porn_title(title: str, patterns: List[str]) -> str:
+    """清理PORN视频标题"""
     # 先应用通用清理
     from ..common.common import clean_filename
     cleaned = clean_filename(title, patterns)
     
-    # PRONHUB特定的清理
-    # 移除PRONHUB特有的标记
-    cleaned = re.sub(r'\b(pronhub|PH)\b', '', cleaned, flags=re.IGNORECASE)
-    # 移除PRONHUB特有的标签格式
-    cleaned = re.sub(r'(?i)\[pronhub\]\s*', '', cleaned)
+    # PORN特定的清理
+    # 移除PORN特有的标记
+    cleaned = re.sub(r'\b(porn|PH)\b', '', cleaned, flags=re.IGNORECASE)
+    # 移除PORN特有的标签格式
+    cleaned = re.sub(r'(?i)\[porn\]\s*', '', cleaned)
     # 再次清理空格
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     
     return cleaned
 
-def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts: Set[str], 
+def scan_porn_models(config_models: dict, local_roots: List[str], video_exts: Set[str], 
                        clean_patterns: List[str], logger) -> List[Tuple[str, str, str, str]]:
     """
-    扫描PRONHUB格式的本地模特目录（带[Channel]前缀）
+    扫描PORN格式的本地模特目录（带[Channel]前缀）
     返回(模特名, 模特根路径, 原始目录名, 国家)元组列表
     """
     from ..common.common import clean_filename
@@ -420,20 +420,20 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
         root = os.path.normpath(root)
         
         if not os.path.exists(root):
-            logger.warning(f"⚠ PRONHUB - 路径不存在: {root}")
+            logger.warning(f"⚠ PORN - 路径不存在: {root}")
             continue
             
-        logger.info(f"PRONHUB - 扫描目录: {root}")
+        logger.info(f"PORN - 扫描目录: {root}")
         
         try:
             # 递归扫描所有子目录
             for current_dir, _, subdirs in os.walk(root):
                 # 跳过根目录本身
                 if current_dir == root:
-                    logger.debug(f"  PRONHUB - 跳过根目录: {os.path.basename(current_dir)}")
+                    logger.debug(f"  PORN - 跳过根目录: {os.path.basename(current_dir)}")
                     continue
                 
-                # 检查当前目录是否是PRONHUB格式的模特目录（带前缀）
+                # 检查当前目录是否是PORN格式的模特目录（带前缀）
                 dir_name = os.path.basename(current_dir)
                 
                 # 提取模特名
@@ -443,12 +443,12 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
                 # 匹配 [Channel] 前缀
                 if dir_name.startswith("[Channel] "):
                     model_name = dir_name[len("[Channel] "):].strip()
-                    logger.debug(f"  PRONHUB - 提取模特名: {model_name} (从 {dir_name})")
+                    logger.debug(f"  PORN - 提取模特名: {model_name} (从 {dir_name})")
                 elif re.match(r'^\[.*?\]\s+', dir_name):
                     model_name = re.sub(r'^\[.*?\]\s+', '', dir_name).strip()
-                    logger.debug(f"  PRONHUB - 提取模特名: {model_name} (从 {dir_name})")
+                    logger.debug(f"  PORN - 提取模特名: {model_name} (从 {dir_name})")
                 else:
-                    # 跳过非PRONHUB格式的目录
+                    # 跳过非PORN格式的目录
                     continue
                 
                 # 在配置中查找匹配的模特名
@@ -458,21 +458,21 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
                     config_lower = config_model.lower().replace(' ', '').replace('_', '').replace('-', '')
                     model_lower = model_name.lower().replace(' ', '').replace('_', '').replace('-', '')
                     
-                    logger.debug(f"  PRONHUB - 匹配测试: {model_name} vs {config_model}")
-                    logger.debug(f"  PRONHUB - 标准化: {model_lower} vs {config_lower}")
+                    logger.debug(f"  PORN - 匹配测试: {model_name} vs {config_model}")
+                    logger.debug(f"  PORN - 标准化: {model_lower} vs {config_lower}")
                     
                     if (model_lower == config_lower or 
                         model_lower in config_lower or 
                         config_lower in model_lower):
                         matched_model = config_model
-                        logger.debug(f"  PRONHUB - 匹配成功: {model_name} -> {matched_model}")
+                        logger.debug(f"  PORN - 匹配成功: {model_name} -> {matched_model}")
                         break
                 
                 # 如果没有精确匹配，尝试模糊匹配
                 if not matched_model:
                     # 直接使用目录提取的模特名
                     matched_model = model_name
-                    logger.debug(f"  PRONHUB - 模糊匹配: 使用目录名作为模特名: {matched_model}")
+                    logger.debug(f"  PORN - 模糊匹配: 使用目录名作为模特名: {matched_model}")
                 
                 if matched_model:
                     # 提取国家信息：从路径中提取国家目录
@@ -480,10 +480,10 @@ def scan_pronhub_models(config_models: dict, local_roots: List[str], video_exts:
                     path_parts = relative_path.split(os.path.sep)
                     country = path_parts[0] if len(path_parts) > 0 else "未知国家"
                     matched.append((matched_model, current_dir, original_dir, country))
-                    logger.info(f"  PRONHUB - 找到本地模特: {matched_model} ({original_dir}) 在 {os.path.join(country, original_dir)}")
+                    logger.info(f"  PORN - 找到本地模特: {matched_model} ({original_dir}) 在 {os.path.join(country, original_dir)}")
         except PermissionError:
-            logger.error(f"  PRONHUB - 权限不足，无法访问: {root}")
+            logger.error(f"  PORN - 权限不足，无法访问: {root}")
             continue
     
-    logger.info(f"PRONHUB - ✅ 共找到 {len(matched)} 个匹配的本地模特目录")
+    logger.info(f"PORN - ✅ 共找到 {len(matched)} 个匹配的本地模特目录")
     return matched

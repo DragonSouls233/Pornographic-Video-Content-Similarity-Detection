@@ -9,10 +9,10 @@ import os
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core.modules.pronhub.downloader import (
+from core.modules.porn.downloader import (
     download_model_complete_directory,
     batch_download_models,
-    get_pronhub_video_info
+    get_porn_video_info
 )
 
 
@@ -23,7 +23,7 @@ def demo_single_model_download():
     print("=" * 60)
     
     # 示例模特信息（请替换为实际的模特URL和名称）
-    model_url = "https://www.pornhub.com/model/your-model-name"
+    model_url = "https://www.porn.com/model/your-model-name"
     model_name = "模特名称"
     
     def progress_callback(message):
@@ -61,8 +61,8 @@ def demo_batch_download():
     
     # 示例模特列表（请替换为实际的模特信息）
     models_info = [
-        ("模特1", "https://www.pornhub.com/model/model1", None),
-        ("模特2", "https://www.pornhub.com/model/model2", None),
+        ("模特1", "https://www.porn.com/model/model1", None),
+        ("模特2", "https://www.porn.com/model/model2", None),
     ]
     
     def progress_callback(message):
@@ -96,11 +96,11 @@ def demo_video_info():
     print("=" * 60)
     
     # 示例视频URL（请替换为实际的视频URL）
-    video_url = "https://www.pornhub.com/view_video.php?viewkey=example"
+    video_url = "https://www.porn.com/view_video.php?viewkey=example"
     
     print(f"获取视频信息: {video_url}")
     
-    result = get_pronhub_video_info(video_url)
+    result = get_porn_video_info(video_url)
     
     print("\n视频信息:")
     print(f"获取成功: {result['success']}")

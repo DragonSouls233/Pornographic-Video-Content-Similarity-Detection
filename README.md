@@ -24,11 +24,11 @@
 
 ### 快速使用：
 ```python
-from core.modules.pronhub.downloader import download_model_complete_directory
+from core.modules.porn.downloader import download_model_complete_directory
 
 # 下载单个模特的完整目录
 result = download_model_complete_directory(
-    model_url="https://www.pornhub.com/model/your-model",
+    model_url="https://www.porn.com/model/your-model",
     model_name="模特名称",
     max_videos=50  # 可选：限制下载数量
 )

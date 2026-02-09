@@ -59,14 +59,14 @@
 ### 方法 3: 命令行/脚本调用
 
 ```python
-from core.modules.pronhub.downloader import (
+from core.modules.porn.downloader import (
     download_model_complete_directory,
     batch_download_models
 )
 
 # 单个模特完整下载
 result = download_model_complete_directory(
-    model_url="https://www.pornhub.com/model/your-model",
+    model_url="https://www.porn.com/model/your-model",
     model_name="模特名称",
     max_videos=50,  # 可选：限制下载数量
     progress_callback=lambda msg: print(f"进度: {msg}")
@@ -74,8 +74,8 @@ result = download_model_complete_directory(
 
 # 批量下载
 models_info = [
-    ("模特1", "https://www.pornhub.com/model/model1", "自定义保存目录"),
-    ("模特2", "https://www.pornhub.com/model/model2", None),
+    ("模特1", "https://www.porn.com/model/model1", "自定义保存目录"),
+    ("模特2", "https://www.porn.com/model/model2", None),
 ]
 
 result = batch_download_models(
@@ -113,7 +113,7 @@ network:
 在 `config.yaml` 中配置 Cookie：
 
 ```yaml
-pronhub:
+porn:
   cookies_file: "path/to/cookies.txt"
 ```
 
@@ -122,7 +122,7 @@ pronhub:
 在 `config.yaml` 中可以配置下载选项：
 
 ```yaml
-pronhub:
+porn:
   download_options:
     max_resolution: 0      # 0=不限制，其他值为像素高度
     preferred_format: "mp4"  # 首选视频格式

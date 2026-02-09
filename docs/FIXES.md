@@ -87,22 +87,22 @@ class SeleniumHelper:
 
 #### B. 更新抓取模块
 **文件:**
-- `core/modules/pronhub/pronhub.py`
+- `core/modules/porn/porn.py`
 - `core/modules/javdb/javdb.py`
 
 **修改:**
 ```python
 # 新增函数
-fetch_with_selenium_pronhub()    # Selenium 抓取
+fetch_with_selenium_porn()    # Selenium 抓取
 fetch_with_selenium_javdb()      # Selenium 抓取
 
 # 更新原有函数
-fetch_with_requests_pronhub()    # 改为分发函数
+fetch_with_requests_porn()    # 改为分发函数
 - 优先使用 Selenium
 - 失败时自动回退到 requests
 
 # 重命名原有实现
-fetch_with_requests_only_pronhub()  # 纯 requests 实现
+fetch_with_requests_only_porn()  # 纯 requests 实现
 fetch_with_requests_only_javdb()    # 纯 requests 实现
 ```
 

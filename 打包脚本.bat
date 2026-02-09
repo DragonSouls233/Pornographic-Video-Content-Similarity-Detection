@@ -86,9 +86,9 @@ pyinstaller --clean ^
     --hidden-import charset_normalizer ^
     --hidden-import core.modules ^
     --hidden-import core.modules.common ^
-    --hidden-import core.modules.pronhub ^
-    --hidden-import core.modules.pronhub.downloader ^
-    --hidden-import core.modules.pronhub.pronhub ^
+    --hidden-import core.modules.porn ^
+    --hidden-import core.modules.porn.downloader ^
+    --hidden-import core.modules.porn.porn ^
     --hidden-import core.modules.javdb ^
     --hidden-import core.modules.javdb.scraper ^
     --collect-submodules selenium ^
@@ -153,7 +153,7 @@ echo 提示:
 echo 1. 首次运行会自动下载 ChromeDriver
 echo 2. 确保安装了 Chrome 浏览器
 echo 3. 配置文件会自动生成
-echo 4. PRONHUB模块支持视频下载功能
+echo 4. PORN模块支持视频下载功能
 echo 5. JAVDB模块专注于内容管理，无下载功能
 echo 6. 支持porn和JAV分类目录配置
 echo.

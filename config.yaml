@@ -245,8 +245,8 @@ video_extensions:
 - .wmv
 - .flv
 
-# Pornhub下载配置
-pronhub:
+# Porn下载配置
+porn:
   # Cookie文件路径（用于访问会员内容）
   cookies_file: ""
   # 下载选项

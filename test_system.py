@@ -161,7 +161,7 @@ def test_file_structure():
         'core/modules/common/common.py',
         'core/modules/common/selenium_helper.py',
         'core/modules/common/error_handler.py',
-        'core/modules/pronhub/pronhub.py',
+        'core/modules/porn/porn.py',
         'core/modules/javdb/javdb.py',
         'gui/gui.py',
         'gui/browser.py',
@@ -169,7 +169,8 @@ def test_file_structure():
         '打包脚本.bat',
         'build.sh',
         'README.md',
-        'INSTALL.md',
+        'docs/INSTALL.md',
+        'docs/README.md',
     ]
     
     success_count = 0

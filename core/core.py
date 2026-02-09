@@ -30,9 +30,9 @@ from core.modules.common.common import (
 
 from core.modules.common.smart_cache import SmartCache
 
-from core.modules.pronhub.pronhub import (
-    fetch_with_requests_pronhub,
-    scan_pronhub_models
+from core.modules.porn.porn import (
+    fetch_with_requests_porn,
+    scan_porn_models
 )
 
 from core.modules.javdb.javdb import (
@@ -70,7 +70,7 @@ class ModelProcessor:
         
         Args:
             config: 配置字典
-            module_type: 模块类型 (1=PRONHUB, 2=JAVDB, 3=AUTO)
+            module_type: 模块类型 (1=PORN, 2=JAVDB, 3=AUTO)
             logger: 主日志记录器
             missing_logger: 缺失视频日志记录器
             countries_dir: 国家分类目录
@@ -187,7 +187,7 @@ class ModelProcessor:
                 try:
                     # 根据模块类型选择抓取函数，传入智能缓存
                     if self.module_type == 1 or (self.module_type == 3 and '[Channel]' in original_dir):
-                        online_set, title_to_url = fetch_with_requests_pronhub(
+                        online_set, title_to_url = fetch_with_requests_porn(
                             url, self.logger, max_pages, self.config,
                             self.smart_cache, model_name
                         )
@@ -277,7 +277,7 @@ class ModelProcessor:
                 # 线程安全的日志记录
                 with threading.Lock():
                     # 获取日志模板类型
-                    template_type = self.config.get('pronhub', {}).get('missing_log_template', 'simple')
+                    template_type = self.config.get('porn', {}).get('missing_log_template', 'simple')
                     record_missing_videos(
                         model_name, url, missing_with_urls,
                         self.missing_logger, self.logger,
@@ -308,7 +308,7 @@ class ModelProcessor:
                         f.write(f"本地目录: {original_dir}\n")
                         f.write(f"完整路径: {folder}\n")
                         f.write(f"统计: 在线 {len(online_set)} 个 | 新视频 {len(new_videos)} 个 | 本地 {len(local_set)} 个 | 缺失 {len(missing)} 个\n")
-                        f.write(f"处理模块: {'PRONHUB' if self.module_type == 1 or ('[Channel]' in original_dir and self.module_type == 3) else 'JAVDB'}\n")
+                        f.write(f"处理模块: {'PORN' if self.module_type == 1 or ('[Channel]' in original_dir and self.module_type == 3) else 'JAVDB'}\n")
                         f.write("=" * 60 + "\n\n")
                         
                         if missing:
@@ -480,7 +480,7 @@ def generate_reports(all_missing: List[ModelResult], config: dict,
             f.write("=" * 60 + "\n")
             f.write("缺失视频清单\n")
             f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"运行模块: {'PRONHUB' if module_type == 1 else 'JAVDB' if module_type == 2 else '自动模式'}\n")
+            f.write(f"运行模块: {'PORN' if module_type == 1 else 'JAVDB' if module_type == 2 else '自动模式'}\n")
             f.write("=" * 60 + "\n\n")
             
             for result in missing_models:
@@ -504,7 +504,7 @@ def generate_reports(all_missing: List[ModelResult], config: dict,
                 "generated_at": datetime.now().isoformat(),
                 "total_models_processed": processed_count,
                 "models_with_missing": len(missing_models),
-                "running_module": "PRONHUB" if module_type == 1 else "JAVDB" if module_type == 2 else "AUTO",
+                "running_module": "PORN" if module_type == 1 else "JAVDB" if module_type == 2 else "AUTO",
                 "missing_details": [
                     {
                         "model": r.model_name,
@@ -546,14 +546,14 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
     """主程序入口
     
     Args:
-        module_arg: 模块类型参数，可选值: "auto", "pronhub", "javdb"
+        module_arg: 模块类型参数，可选值: "auto", "porn", "javdb"
         local_dirs: 本地目录路径列表，如果提供则覆盖配置文件中的设置
         scraper: 抓取工具，可选值: "selenium", "playwright", "drissionpage", "zendriver"
         running_flag: 运行标志，用于控制程序是否继续运行
     """
     try:
         # 模块选择
-        if module_arg == "pronhub":
+        if module_arg == "porn":
             module_type = 1
         elif module_arg == "javdb":
             module_type = 2
@@ -587,7 +587,7 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         logger.info(f"输出目录: {config['output_dir']}")
         logger.info(f"抓取工具: {config.get('scraper', 'selenium')}")
         logger.info(f"最大翻页: {config.get('max_pages', '无限制')}")
-        logger.info(f"运行模块: {'PRONHUB' if module_type == 1 else 'JAVDB' if module_type == 2 else '自动模式'}")
+        logger.info(f"运行模块: {'PORN' if module_type == 1 else 'JAVDB' if module_type == 2 else '自动模式'}")
         logger.info(f"多线程模式: {'启用' if use_multithreading else '禁用'} ({max_workers} 工作线程)")
         logger.info("=" * 60)
         
@@ -642,7 +642,7 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         # 扫描本地模特目录
         local_matches = []
         if module_type == 1:
-            local_matches = scan_pronhub_models(
+            local_matches = scan_porn_models(
                 models,
                 config['local_roots'],
                 set(config['video_extensions']),
@@ -658,7 +658,7 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 logger
             )
         else:
-            pronhub_matches = scan_pronhub_models(
+            porn_matches = scan_porn_models(
                 models,
                 config['local_roots'],
                 set(config['video_extensions']),
@@ -673,7 +673,7 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 logger
             )
             seen_models = set()
-            for match in pronhub_matches + javdb_matches:
+            for match in porn_matches + javdb_matches:
                 if match[0] not in seen_models:
                     seen_models.add(match[0])
                     local_matches.append(match)

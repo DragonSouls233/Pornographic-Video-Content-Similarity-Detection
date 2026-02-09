@@ -102,7 +102,7 @@ def load_models(model_path: str = "models.json") -> dict:
     
     支持两种格式：
     1. 旧格式：{"模特名": "URL"}
-    2. 新格式：{"模特名": {"module": "PRONHUB/JAVDB", "url": "..."}}
+    2. 新格式：{"模特名": {"module": "PORN/JAVDB", "url": "..."}}
     
     返回值：统一转换为 {"模特名": "URL"} 格式以兼容现有代码
     """
@@ -499,7 +499,7 @@ def _record_missing_detailed(model_name: str, url: str, missing_titles: List[Tup
         missing_logger.info("💡 下载建议:")
         missing_logger.info(f"  • 可以使用以下命令批量下载:")
         missing_logger.info(f"    python -c \"")
-        missing_logger.info(f"    from core.modules.pronhub.downloader import download_model_complete_directory;")
+        missing_logger.info(f"    from core.modules.porn.downloader import download_model_complete_directory;")
         missing_logger.info(f"    download_model_complete_directory('{url}', '{model_name}')")
         missing_logger.info(f"    \"")
         missing_logger.info("")

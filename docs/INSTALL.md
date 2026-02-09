@@ -142,7 +142,7 @@ local_roots:
 1. 进入【运行控制】标签页
 2. 选择模块类型：
    - `auto`：自动识别（推荐）
-   - `pronhub`：只处理 PRONHUB 格式
+   - `porn`：只处理 PORN 格式
    - `javdb`：只处理 JAVDB 格式
 3. 选择抓取工具：
    - `selenium`：浏览器自动化（推荐，可绕过反爬虫）
@@ -167,7 +167,7 @@ local_roots:
 python core/core.py
 
 # 指定模块
-python core/core.py --module pronhub
+python core/core.py --module porn
 
 # 指定抓取工具
 python core/core.py --scraper selenium
@@ -177,7 +177,7 @@ python core/core.py --scraper selenium
 
 ## 📁 目录结构说明
 
-### PRONHUB 格式
+### PORN 格式
 ```
 本地目录/
 ├── 国家名/

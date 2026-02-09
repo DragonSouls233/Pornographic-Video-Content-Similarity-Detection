@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Pornhub视频下载模块
+Porn视频下载模块
 基于yt-dlp实现最高分辨率下载，支持会员内容和代理配置
 """
 import os
@@ -23,8 +23,8 @@ from core.modules.common.common import get_config, get_session, ensure_dir_exist
 logger = logging.getLogger(__name__)
 
 
-class PornhubDownloader:
-    """Pornhub视频下载器"""
+class PornDownloader:
+    """Porn视频下载器"""
     
     def __init__(self, config: Optional[Dict] = None):
         """
@@ -68,8 +68,8 @@ class PornhubDownloader:
         
         # Cookie支持（用于会员内容）
         self.cookies_file = None
-        if self.config.get('pornhub', {}).get('cookies_file'):
-            self.cookies_file = self.config['pornhub']['cookies_file']
+        if self.config.get('porn', {}).get('cookies_file'):
+            self.cookies_file = self.config['porn']['cookies_file']
             if os.path.exists(self.cookies_file):
                 self.download_options['cookiefile'] = self.cookies_file
     
@@ -163,7 +163,7 @@ class PornhubDownloader:
         下载单个视频
         
         Args:
-            url: Pornhub视频URL
+            url: Porn视频URL
             save_dir: 指定保存目录，如果为None则自动选择模特目录
             
         Returns:
@@ -264,7 +264,7 @@ class PornhubDownloader:
         批量下载视频
         
         Args:
-            urls: Pornhub视频URL列表
+            urls: Porn视频URL列表
             save_dir: 指定保存目录
             
         Returns:
@@ -302,7 +302,7 @@ class PornhubDownloader:
         仅获取视频信息，不下载
         
         Args:
-            url: Pornhub视频URL
+            url: Porn视频URL
             
         Returns:
             视频信息字典
@@ -349,50 +349,50 @@ class PornhubDownloader:
 
 
 # 便捷函数
-def download_pronhub_video(url: str, save_dir: Optional[str] = None, config: Optional[Dict] = None) -> Dict:
+def download_porn_video(url: str, save_dir: Optional[str] = None, config: Optional[Dict] = None) -> Dict:
     """
-    下载单个Pornhub视频的便捷函数
+    下载单个Porn视频的便捷函数
     
     Args:
-        url: Pornhub视频URL
+        url: Porn视频URL
         save_dir: 保存目录（可选）
         config: 配置字典（可选）
         
     Returns:
         下载结果
     """
-    downloader = PornhubDownloader(config)
+    downloader = PornDownloader(config)
     return downloader.download_single_video(url, save_dir)
 
 
-def download_pronhub_urls(urls: List[str], save_dir: Optional[str] = None, config: Optional[Dict] = None) -> List[Dict]:
+def download_porn_urls(urls: List[str], save_dir: Optional[str] = None, config: Optional[Dict] = None) -> List[Dict]:
     """
-    批量下载Pornhub视频的便捷函数
+    批量下载Porn视频的便捷函数
     
     Args:
-        urls: Pornhub视频URL列表
+        urls: Porn视频URL列表
         save_dir: 保存目录（可选）
         config: 配置字典（可选）
         
     Returns:
         下载结果列表
     """
-    downloader = PornhubDownloader(config)
+    downloader = PornDownloader(config)
     return downloader.download_multiple_videos(urls, save_dir)
 
 
-def get_pronhub_video_info(url: str, config: Optional[Dict] = None) -> Dict:
+def get_porn_video_info(url: str, config: Optional[Dict] = None) -> Dict:
     """
-    获取Pornhub视频信息的便捷函数
+    获取Porn视频信息的便捷函数
     
     Args:
-        url: Pornhub视频URL
+        url: Porn视频URL
         config: 配置字典（可选）
         
     Returns:
         视频信息
     """
-    downloader = PornhubDownloader(config)
+    downloader = PornDownloader(config)
     return downloader.get_video_info_only(url)
 
 
@@ -418,7 +418,7 @@ def download_model_complete_directory(model_url: str, model_name: str,
     logger.info(f"开始完整下载模特目录: {model_name}")
     logger.info(f"模特URL: {model_url}")
     
-    downloader = PornhubDownloader(config)
+    downloader = PornDownloader(config)
     
     # 确定保存目录
     if base_save_dir:
@@ -553,12 +553,12 @@ def _get_model_all_videos(model_url: str, config: Optional[Dict] = None) -> List
         (标题, URL) 元组的列表
     """
     try:
-        from core.modules.pronhub.pronhub import fetch_with_requests_pronhub
+        from core.modules.porn.porn import fetch_with_requests_porn
         
         logger.info(f"获取模特视频列表: {model_url}")
         
         # 使用现有的抓取函数获取视频列表
-        online_set, title_to_url = fetch_with_requests_pronhub(
+        online_set, title_to_url = fetch_with_requests_porn(
             model_url, logger, -1, config or {}, None, ""
         )
         
@@ -670,13 +670,13 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python downloader.py <pornhub_url> [save_dir]")
+        print("Usage: python downloader.py <porn_url> [save_dir]")
         sys.exit(1)
     
     url = sys.argv[1]
     save_dir = sys.argv[2] if len(sys.argv) > 2 else None
     
-    result = download_pronhub_video(url, save_dir)
+    result = download_porn_video(url, save_dir)
     
     if result['success']:
         print(f"下载成功: {result['file_path']}")
