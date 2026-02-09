@@ -408,11 +408,34 @@ def test_proxy_connection(proxy_config: dict, timeout: int = 5, logger=None) -> 
 
 
 def record_missing_videos(model_name: str, url: str, missing_titles: List[Tuple[str, str]], 
-                         missing_logger, logger, local_count=0, online_count=0):
-    """记录缺失视频到专用日志文件"""
+                         missing_logger, logger, local_count=0, online_count=0, template_type="simple"):
+    """记录缺失视频到专用日志文件
+    
+    Args:
+        model_name: 模特名称
+        url: 模特链接
+        missing_titles: 缺失视频列表 [(标题, URL)]
+        missing_logger: 缺失日志记录器
+        logger: 主日志记录器
+        local_count: 本地视频数量
+        online_count: 在线视频数量
+        template_type: 日志模板类型 ("simple" | "detailed")
+    """
     if not missing_titles and not online_count:
         return
     
+    if template_type == "simple":
+        _record_missing_simple(model_name, url, missing_titles, missing_logger, logger, local_count, online_count)
+    elif template_type == "detailed":
+        _record_missing_detailed(model_name, url, missing_titles, missing_logger, logger, local_count, online_count)
+    else:
+        # 默认使用简单模板
+        _record_missing_simple(model_name, url, missing_titles, missing_logger, logger, local_count, online_count)
+
+
+def _record_missing_simple(model_name: str, url: str, missing_titles: List[Tuple[str, str]], 
+                         missing_logger, logger, local_count=0, online_count=0):
+    """简单模板：只记录标题和链接"""
     missing_logger.info("=" * 60)
     missing_logger.info(f"模特: {model_name}")
     missing_logger.info(f"链接: {url}")
@@ -432,3 +455,64 @@ def record_missing_videos(model_name: str, url: str, missing_titles: List[Tuple[
     
     missing_logger.info("=" * 60 + "\n")
     logger.warning(f"  🔴 缺失 {len(missing_titles)} 个视频，已记录到缺失日志")
+
+
+def _record_missing_detailed(model_name: str, url: str, missing_titles: List[Tuple[str, str]], 
+                         missing_logger, logger, local_count=0, online_count=0):
+    """详细模板：记录更多信息包括统计和格式化输出"""
+    from datetime import datetime
+    
+    missing_logger.info("=" * 80)
+    missing_logger.info(f"缺失视频报告 - {model_name}")
+    missing_logger.info("=" * 80)
+    missing_logger.info(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    missing_logger.info(f"模特链接: {url}")
+    missing_logger.info("")
+    
+    # 统计信息
+    missing_logger.info("📊 统计信息:")
+    missing_logger.info(f"  • 在线视频总数: {online_count}")
+    missing_logger.info(f"  • 本地已有视频: {local_count}")
+    missing_logger.info(f"  • 缺失视频数量: {len(missing_titles)}")
+    missing_logger.info(f"  • 完整度: {((online_count - len(missing_titles)) / online_count * 100):.1f}% ({online_count - len(missing_titles)}/{online_count})")
+    missing_logger.info("")
+    
+    if missing_titles:
+        missing_logger.info("📋 缺失视频列表:")
+        missing_logger.info("-" * 80)
+        
+        for i, (title, video_url) in enumerate(missing_titles, 1):
+            missing_logger.info(f"{i:3d}. 标题: {title}")
+            if video_url:
+                missing_logger.info(f"    链接: {video_url}")
+            else:
+                missing_logger.info(f"    链接: [未获取到链接]")
+            
+            # 每10个视频添加一个分隔线
+            if i % 10 == 0 and i > 0:
+                missing_logger.info("-" * 40)
+        
+        missing_logger.info("-" * 80)
+        
+        # 下载建议
+        missing_logger.info("")
+        missing_logger.info("💡 下载建议:")
+        missing_logger.info(f"  • 可以使用以下命令批量下载:")
+        missing_logger.info(f"    python -c \"")
+        missing_logger.info(f"    from core.modules.pronhub.downloader import download_model_complete_directory;")
+        missing_logger.info(f"    download_model_complete_directory('{url}', '{model_name}')")
+        missing_logger.info(f"    \"")
+        missing_logger.info("")
+        missing_logger.info("  • 或者在GUI中选择'完整下载模特目录'功能")
+    else:
+        missing_logger.info("✅ 视频完整度: 100% - 无缺失视频")
+    
+    missing_logger.info("")
+    missing_logger.info("=" * 80)
+    missing_logger.info("报告结束")
+    missing_logger.info("=" * 80 + "\n")
+    
+    if missing_titles:
+        logger.warning(f"  🔴 缺失 {len(missing_titles)} 个视频，已记录到缺失日志（详细模板）")
+    else:
+        logger.info(f"  ✅ 模特 {model_name} 视频完整，无缺失")

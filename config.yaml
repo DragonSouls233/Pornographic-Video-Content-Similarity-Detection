@@ -173,3 +173,5 @@ pronhub:
     max_retries: 3
     # 超时时间（秒）
     timeout: 300
+  # 缺失日志模板类型 ("simple" | "detailed")
+  missing_log_template: "simple"

@@ -276,10 +276,13 @@ class ModelProcessor:
                 
                 # 线程安全的日志记录
                 with threading.Lock():
+                    # 获取日志模板类型
+                    template_type = self.config.get('pronhub', {}).get('missing_log_template', 'simple')
                     record_missing_videos(
                         model_name, url, missing_with_urls,
                         self.missing_logger, self.logger,
-                        local_count=len(local_set), online_count=len(online_set)
+                        local_count=len(local_set), online_count=len(online_set),
+                        template_type=template_type
                     )
                 
                 # 保存国家-模特的详细报告
