@@ -356,6 +356,10 @@ class ModelManagerGUI:
         
         self.result_tree.pack(fill=tk.BOTH, expand=True)
         
+        # 绑定右键菜单到结果树
+        self.result_tree.bind("<Button-3>", self.show_result_context_menu)  # Windows/Linux
+        self.result_tree.bind("<Button-2>", self.show_result_context_menu)  # macOS
+        
         # 操作按钮
         action_frame = ttk.Frame(result_frame)
         action_frame.pack(fill=tk.X, pady=(10, 0))
@@ -1932,7 +1936,14 @@ class ModelManagerGUI:
                     # 添加缺失视频到列表
                     if hasattr(result, 'missing_with_urls') and result.missing_with_urls:
                         for title, url in result.missing_with_urls:
-                            self.result_tree.insert("", tk.END, values=(result.model_name, title, url))
+                            # 添加额外信息：如模特的模块类型
+                            model_info = self.models.get(result.model_name, {})
+                            if isinstance(model_info, dict):
+                                model_module = model_info.get("module", "未知")
+                            else:
+                                model_module = "PORN" if "javdb" not in str(model_info).lower() else "JAVDB"
+                            
+                            self.result_tree.insert("", tk.END, values=(result.model_name, f"[{model_module}] {title}", url))
                             missing_count += 1
                 else:
                     failed_count += 1
@@ -2282,6 +2293,27 @@ class ModelManagerGUI:
     
     def download_complete_model_directories(self):
         """完整下载模特目录"""
+        # 首先检查是否在结果标签页中有选中的项目
+        selected_items = self.result_tree.selection()
+        if selected_items and hasattr(self, 'current_results') and self.current_results:
+            # 从选中的结果中提取模特信息
+            selected_models = set()  # 使用集合避免重复
+            for item in selected_items:
+                values = self.result_tree.item(item, "values")
+                if values:
+                    model_name = values[0]
+                    selected_models.add(model_name)
+            
+            if selected_models:
+                # 如果有选中的模特，则直接使用这些模特
+                self._show_complete_download_dialog(preselected_models=selected_models)
+                return
+        
+        # 如果没有选中的项目或没有结果数据，则显示完整的模特列表
+        self._show_complete_download_dialog()
+    
+    def _show_complete_download_dialog(self, preselected_models=None):
+        """显示完整下载对话框，可以选择预选的模特"""
         try:
             # 检查是否有结果数据
             if not hasattr(self, 'current_results') or not self.current_results:
@@ -2317,6 +2349,12 @@ class ModelManagerGUI:
                 if result.success and result.url:
                     model_listbox.insert(tk.END, f"{model_name} (本地: {result.local_count}, 缺失: {result.missing_count})")
                     model_names.append(model_name)
+            
+            # 如果提供了预选模特，则自动选择它们
+            if preselected_models:
+                for i, model_name in enumerate(model_names):
+                    if model_name in preselected_models:
+                        model_listbox.select_set(i)
             
             # 选项框架
             options_frame = ttk.Frame(dialog)
@@ -2808,6 +2846,171 @@ class ModelManagerGUI:
             messagebox.showinfo("提示", "下载取消请求已发送，请等待当前任务完成")
         else:
             messagebox.showinfo("提示", "当前没有正在进行的下载任务")
+    
+    def show_result_context_menu(self, event):
+        """显示结果列表的右键上下文菜单"""
+        try:
+            # 选中被右键点击的项目
+            item = self.result_tree.identify_row(event.y)
+            if item:
+                self.result_tree.selection_set(item)
+                
+            # 创建上下文菜单
+            context_menu = tk.Menu(self.root, tearoff=0)
+            
+            # 获取选中的项目信息
+            selected_items = self.result_tree.selection()
+            if selected_items:
+                item_values = self.result_tree.item(selected_items[0], "values")
+                if item_values:
+                    model_name = item_values[0]
+                    video_title = item_values[1]
+                    video_url = item_values[2] if len(item_values) > 2 else ""
+                    
+                    # 添加菜单项
+                    context_menu.add_command(label=f"查看模特信息: {model_name}", 
+                                           command=lambda: self.focus_on_model(model_name))
+                    
+                    # 检查模特是否有URL，如果有则添加下载选项
+                    model_info = self.models.get(model_name, {})
+                    if isinstance(model_info, dict):
+                        model_url = model_info.get("url", "")
+                    else:
+                        model_url = model_info
+                    
+                    if model_url:
+                        context_menu.add_command(label=f"下载 {model_name} 的完整目录", 
+                                               command=lambda: self.download_model_from_result(model_name, model_url))
+                    
+                    if video_url:
+                        context_menu.add_command(label="复制视频链接", 
+                                               command=lambda: self.copy_to_clipboard(video_url))
+                        context_menu.add_command(label="在浏览器中打开", 
+                                               command=lambda: self.open_url_in_browser(video_url))
+                    
+                    context_menu.add_separator()
+            
+            # 添加刷新和导出选项
+            context_menu.add_command(label="刷新模特列表", command=self.refresh_models)
+            context_menu.add_command(label="导出当前结果", command=self.export_results)
+            
+            # 显示菜单
+            try:
+                context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                context_menu.grab_release()
+        except Exception as e:
+            print(f"显示右键菜单失败: {e}")
+    
+    def focus_on_model(self, model_name):
+        """在模特管理标签页中定位到指定模特"""
+        # 切换到模特管理标签页
+        self.notebook.select(self.model_tab)
+        
+        # 清除当前选择
+        for item in self.model_tree.selection():
+            self.model_tree.selection_remove(item)
+        
+        # 查找并选中指定模特
+        for item in self.model_tree.get_children():
+            values = self.model_tree.item(item, "values")
+            if values and values[0] == model_name:
+                self.model_tree.selection_set(item)
+                self.model_tree.focus(item)
+                self.model_tree.see(item)  # 滚动到该项
+                break
+    
+    def download_model_from_result(self, model_name, model_url):
+        """从结果中直接下载模特的完整目录"""
+        try:
+            # 检查是否已经获取了模特的URL
+            if not model_url or model_url.strip() == "":
+                messagebox.showwarning("警告", f"模特 {model_name} 没有有效的URL，无法下载")
+                return
+            
+            # 选择下载目录
+            save_dir = self._select_download_directory()
+            if not save_dir:
+                return
+            
+            # 确认下载
+            if not messagebox.askyesno("确认下载", f"确定要下载模特『{model_name}』的完整目录吗？\n这将下载该模特的所有视频！"):
+                return
+            
+            # 准备下载参数
+            selected_models = [(model_name, model_url.strip(), save_dir)]
+            
+            # 使用后台线程执行下载
+            threading.Thread(target=self._execute_download, 
+                           args=(selected_models,), 
+                           daemon=True).start()
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"从结果下载模特失败: {e}")
+    
+    def copy_to_clipboard(self, text):
+        """复制文本到剪贴板"""
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            self.root.update()  # 确保内容被复制
+            messagebox.showinfo("提示", "已复制到剪贴板")
+        except Exception as e:
+            messagebox.showerror("错误", f"复制到剪贴板失败: {e}")
+    
+    def open_url_in_browser(self, url):
+        """在浏览器中打开URL"""
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("错误", f"无法打开浏览器: {e}")
+    
+    def _select_download_directory(self):
+        """选择下载目录"""
+        try:
+            initial_dir = os.getcwd()
+            if hasattr(self, 'download_dir_var') and self.download_dir_var.get():
+                initial_dir = self.download_dir_var.get()
+            
+            save_dir = filedialog.askdirectory(initialdir=initial_dir, title="选择下载目录")
+            return save_dir
+        except Exception as e:
+            messagebox.showerror("错误", f"选择下载目录失败: {e}")
+            return None
+    
+    def _execute_download(self, selected_models):
+        """执行下载操作的后台线程"""
+        try:
+            # 导入下载模块
+            from core.modules.porn.unified_downloader import UnifiedDownloader
+            
+            # 从配置中获取设置
+            config = self.load_config()
+            
+            # 初始化下载器
+            downloader = UnifiedDownloader(config)
+            
+            # 逐个下载模特
+            for model_name, model_url, save_dir in selected_models:
+                try:
+                    # 调用下载器下载模特完整目录
+                    result = downloader.download_model_complete_directory(
+                        model_url,
+                        model_name,
+                        base_save_dir=save_dir
+                    )
+                    
+                    if result.get('success'):
+                        print(f"模特 {model_name} 下载成功")
+                    else:
+                        print(f"模特 {model_name} 下载失败: {result.get('message', '未知错误')}")
+                except Exception as e:
+                    print(f"下载模特 {model_name} 时发生错误: {e}")
+        except ImportError as e:
+            print(f"下载模块导入失败: {e}")
+        except Exception as e:
+            print(f"执行下载时发生错误: {e}")
     
     def _format_bytes(self, bytes_value):
         """格式化字节数为可读格式"""
