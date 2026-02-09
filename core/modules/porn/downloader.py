@@ -207,7 +207,7 @@ class PornDownloader:
             logger.warning(f"提取视频信息失败: {e}")
             return "Unknown_Title", "Unknown_Model"
     
-    def download_single_video(self, url: str, save_dir: Optional[str] = None) -> Dict:
+    def download_video(self, url: str, save_dir: Optional[str] = None) -> Dict:
         """
         下载单个视频
         
@@ -309,7 +309,7 @@ class PornDownloader:
         
         return result
     
-    def download_multiple_videos(self, urls: List[str], save_dir: Optional[str] = None) -> List[Dict]:
+    def download_videos(self, urls: List[str], save_dir: Optional[str] = None) -> List[Dict]:
         """
         批量下载视频
         
@@ -326,7 +326,7 @@ class PornDownloader:
             logger.info(f"下载进度: {i}/{len(urls)} - {url}")
             
             try:
-                result = self.download_single_video(url, save_dir)
+                result = self.download_video(url, save_dir)
                 results.append(result)
                 
                 # 添加索引信息
@@ -412,7 +412,7 @@ def download_porn_video(url: str, save_dir: Optional[str] = None, config: Option
         下载结果
     """
     downloader = PornDownloader(config)
-    return downloader.download_single_video(url, save_dir)
+    return downloader.download_video(url, save_dir)
 
 
 def download_porn_urls(urls: List[str], save_dir: Optional[str] = None, config: Optional[Dict] = None) -> List[Dict]:
@@ -428,7 +428,7 @@ def download_porn_urls(urls: List[str], save_dir: Optional[str] = None, config: 
         下载结果列表
     """
     downloader = PornDownloader(config)
-    return downloader.download_multiple_videos(urls, save_dir)
+    return downloader.download_videos(urls, save_dir)
 
 
 def get_porn_video_info(url: str, config: Optional[Dict] = None) -> Dict:
@@ -545,7 +545,7 @@ def download_model_complete_directory(model_url: str, model_name: str,
                     continue
                 
                 # 下载视频
-                download_result = downloader.download_single_video(url, str(save_dir))
+                download_result = downloader.download_video(url, str(save_dir))
                 
                 if download_result['success']:
                     result['successful_downloads'] += 1

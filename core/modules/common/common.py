@@ -148,6 +148,9 @@ from .smart_cache import SmartCache, create_smart_cache
 # 导入数据库存储模块
 from .database_storage import create_database_cache_adapter
 
+# 导入异步下载器模块
+from .async_downloader import AsyncDownloadEngine, AsyncDownloaderAdapter
+
 # 全局智能缓存实例（延迟初始化）
 _smart_cache_instance: SmartCache = None
 

@@ -25,6 +25,6 @@ __all__ = [
     'download_porn_videos',       # 统一便捷函数
     'PornDownloader',             # V1原始类
     'download_porn_video_v1',     # V1直接函数
-    'download_porn_urls_v1',      # V1直接函数
+    'download_porn_videos_v1',    # V1直接函数
     'PornHubDownloaderV3Fixed',   # V3原始类
 ]

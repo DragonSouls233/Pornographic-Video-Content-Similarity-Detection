@@ -2249,7 +2249,7 @@ class ModelManagerGUI:
                                     break
                             
                             # 执行下载
-                            result = downloader.download_single_video(url, save_dir)
+                            result = downloader.download_video(url, save_dir)
                             
                             if result['success']:
                                 downloaded_count += 1

@@ -72,7 +72,7 @@ class PornDownloadHandler:
             
             # 执行下载
             try:
-                download_result = downloader.download_single_video(url, save_dir)
+                download_result = downloader.download_video(url, save_dir)
             except requests.exceptions.ConnectionError as e:
                 result['message'] = f"❌ 下载失败 ({i}/{total_count}): {title[:50]}...\n原因: 网络连接错误\n解决: 请检查互联网连接"
                 self.log(result['message'])
