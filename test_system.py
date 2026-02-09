@@ -197,10 +197,12 @@ def test_proxy_config():
     print("=" * 60)
     
     try:
-        from core.modules.common.common import load_config
+        from core.modules.common.common import load_config, test_proxy_connection
         
         config = load_config('config.yaml')
         proxy_config = config.get('network', {}).get('proxy', {})
+        if not proxy_config:
+            proxy_config = config.get('proxy', {})
         
         print(f"代理启用: {proxy_config.get('enabled', False)}")
         print(f"代理类型: {proxy_config.get('type', 'N/A')}")
@@ -210,7 +212,24 @@ def test_proxy_config():
         print(f"HTTPS代理: {proxy_config.get('https', 'N/A')}")
         
         if proxy_config.get('enabled', False):
-            print("\n⚠️  代理已启用，请确保代理工具正在运行")
+            print("\n⚠️  代理已启用，正在测试连接...")
+            
+            # 创建一个简单的 logger 用于测试
+            import logging
+            test_logger = logging.getLogger('test_proxy')
+            test_logger.setLevel(logging.INFO)
+            
+            # 测试代理连接
+            result = test_proxy_connection(proxy_config, timeout=10, logger=test_logger)
+            
+            if result:
+                print("✅ 代理连接测试成功")
+            else:
+                print("❌ 代理连接测试失败")
+                print("💡 提示: 请确保代理工具正在运行")
+                return False
+        else:
+            print("\nℹ️  代理未启用")
         
         print()
         return True

@@ -7,6 +7,7 @@ import random
 import re
 import logging
 import traceback
+import socket
 from datetime import datetime
 from pathlib import Path
 from typing import Set, List, Tuple, Dict, Optional
@@ -283,6 +284,80 @@ def extract_local_folders(folder: str) -> Set[str]:
                 folders.add(cleaned)
     
     return folders
+
+def test_proxy_connection(proxy_config: dict, timeout: int = 5, logger=None) -> bool:
+    """
+    测试代理连接是否可用
+    
+    Args:
+        proxy_config: 代理配置字典
+        timeout: 连接超时时间（秒）
+        logger: 日志记录器
+        
+    Returns:
+        bool: 代理是否可用
+    """
+    if not proxy_config.get('enabled', False):
+        # 未启用代理，直接返回 True
+        return True
+    
+    # 尝试从不同位置获取代理主机和端口
+    host = proxy_config.get('host', '')
+    port = proxy_config.get('port', '')
+    
+    # 如果没有直接的 host 和 port，尝试从 http 代理 URL 中解析
+    if not host or not port:
+        http_proxy = proxy_config.get('http', '')
+        if http_proxy:
+            # 解析代理 URL，例如: http://127.0.0.1:10808 或 socks5://127.0.0.1:10808
+            import re
+            match = re.match(r'(?:https?|socks5?)://([^:]+):(\d+)', http_proxy)
+            if match:
+                host = match.group(1)
+                port = match.group(2)
+    
+    if not host or not port:
+        if logger:
+            logger.warning("⚠️  代理配置不完整，无法进行连接测试")
+        return True  # 配置不完整时不阻止程序运行
+    
+    try:
+        port = int(port)
+        if logger:
+            logger.info(f"🔍 测试代理连接: {host}:{port}")
+        
+        # 创建 socket 连接测试
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        
+        if result == 0:
+            if logger:
+                logger.info(f"✅ 代理连接测试成功: {host}:{port}")
+            return True
+        else:
+            if logger:
+                logger.error(f"❌ 代理连接失败: {host}:{port} (错误码: {result})")
+            return False
+            
+    except socket.timeout:
+        if logger:
+            logger.error(f"❌ 代理连接超时: {host}:{port}")
+        return False
+    except socket.gaierror as e:
+        if logger:
+            logger.error(f"❌ 代理主机名解析失败: {host} ({e})")
+        return False
+    except ValueError as e:
+        if logger:
+            logger.error(f"❌ 代理端口格式错误: {port} ({e})")
+        return False
+    except Exception as e:
+        if logger:
+            logger.error(f"❌ 代理连接测试异常: {e}")
+        return False
+
 
 def record_missing_videos(model_name: str, url: str, missing_titles: List[Tuple[str, str]], 
                          missing_logger, logger, local_count=0, online_count=0):

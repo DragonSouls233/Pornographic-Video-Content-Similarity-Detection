@@ -20,7 +20,8 @@ from core.modules.common.common import (
     save_cache,
     extract_local_videos,
     extract_local_folders,
-    record_missing_videos
+    record_missing_videos,
+    test_proxy_connection
 )
 
 from core.modules.pronhub.pronhub import (
@@ -76,6 +77,44 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         logger.info(f"最大翻页: {config.get('max_pages', '无限制')}")
         logger.info(f"运行模块: {'PRONHUB' if module_type == 1 else 'JAVDB' if module_type == 2 else '自动模式'}")
         logger.info("=" * 60)
+        
+        # 代理连接预检
+        proxy_config = config.get('network', {}).get('proxy', {})
+        if not proxy_config:
+            # 兼容旧版配置格式
+            proxy_config = config.get('proxy', {})
+        
+        if proxy_config.get('enabled', False):
+            logger.info("\n🔍 检测到已启用代理，正在进行连接测试...")
+            
+            # 显示代理配置信息
+            proxy_type = proxy_config.get('type', 'http')
+            proxy_host = proxy_config.get('host', '127.0.0.1')
+            proxy_port = proxy_config.get('port', '10808')
+            logger.info(f"   代理类型: {proxy_type}")
+            logger.info(f"   代理地址: {proxy_host}:{proxy_port}")
+            
+            # 测试代理连接
+            if not test_proxy_connection(proxy_config, timeout=10, logger=logger):
+                logger.error("\n" + "=" * 60)
+                logger.error("❌ 代理连接失败！")
+                logger.error("=" * 60)
+                logger.error("\n请检查以下问题：")
+                logger.error("  1. 代理工具（如 v2rayN、Clash 等）是否已启动")
+                logger.error("  2. 代理配置是否正确（主机地址和端口）")
+                logger.error("  3. 代理工具是否已成功连接到服务器")
+                logger.error("  4. 防火墙是否阻止了代理连接")
+                logger.error("\n💡 解决方法：")
+                logger.error("  • 启动代理工具并确保连接成功")
+                logger.error("  • 在 config.yaml 中修改代理配置")
+                logger.error("  • 或者在 config.yaml 中设置 proxy.enabled: false 禁用代理")
+                logger.error("\n程序已退出，请解决代理问题后重新运行。")
+                logger.error("=" * 60)
+                sys.exit(1)
+            
+            logger.info("✅ 代理连接测试通过，继续执行...\n")
+        else:
+            logger.info("\n📡 未启用代理，使用直接连接\n")
         
         # 创建输出目录
         Path(config['output_dir']).mkdir(exist_ok=True)
