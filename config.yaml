@@ -64,15 +64,13 @@ filename_cleaning:
 local_roots:
   # Western adult content directories
   porn:
-    - "F:/作品/Porn"
-    - "F:/作品/Western"
+    - "F:/作品"
   # Japanese adult video directories  
   jav:
-    - "F:/作品/JAV"
-    - "F:/作品/Japanese"
+    - "F:/作品"
   # General content directories
   general:
-    - "F:/作品/General"
+    - "F:/作品"
 local_scan:
   follow_symlinks: false
   ignore_dirs:
