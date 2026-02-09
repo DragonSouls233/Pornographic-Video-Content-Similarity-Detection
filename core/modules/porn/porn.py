@@ -573,6 +573,9 @@ def _is_video_belong_to_model(video_container, model_name: str, model_url: str, 
             '.userInfo .usernameWrap, [data-user-name], [data-channel-name]'
         )
         
+        positive_matches = 0  # 正面匹配计数
+        negative_matches = 0  # 负面匹配计数
+        
         for indicator in model_indicators:
             indicator_text = indicator.get_text(strip=True)
             if indicator_text:
@@ -584,8 +587,19 @@ def _is_video_belong_to_model(video_container, model_name: str, model_url: str, 
                 if (indicator_clean == model_clean or 
                     indicator_clean in model_clean or 
                     model_clean in indicator_clean):
-                    logger.debug(f"    ✅ 视频确认属于模特: {indicator_text} 匹配 {model_name}")
-                    return True
+                    positive_matches += 1
+                    logger.debug(f"    ✅ 找到匹配的模特标识: {indicator_text} 匹配 {model_name}")
+                elif indicator_clean:  # 如果有文本但不匹配
+                    negative_matches += 1
+                    logger.debug(f"    ⚠️ 找到其他模特标识: {indicator_text} 不匹配 {model_name}")
+        
+        # 判断逻辑：如果有正面匹配，优先认为属于；如果有负面匹配且无正面匹配，则不属于
+        if positive_matches > 0:
+            logger.debug(f"    ✅ 基于正面匹配，视频属于模特: {model_name}")
+            return True
+        elif negative_matches > 0:
+            logger.debug(f"    ❌ 基于负面匹配，视频不属于模特: {model_name}")
+            return False
         
         # 方法2: 检查视频链接是否指向正确的模特页面
         video_links = video_container.find_all('a', href=True)
@@ -601,32 +615,16 @@ def _is_video_belong_to_model(video_container, model_name: str, model_url: str, 
         if '/model/' in model_url:
             # 如果是在模特专属页面，大部分视频应该属于该模特
             # 除非明确标识了其他模特
-            
-            # 检查是否有明确的其他模特标识
-            other_model_indicators = video_container.select(
-                '.username:not(.current-model), .uploader:not(.current-model)'
-            )
-            
-            if other_model_indicators:
-                # 如果找到了其他模特标识，需要进一步验证
-                for other_indicator in other_model_indicators:
-                    other_text = other_indicator.get_text(strip=True)
-                    if other_text and other_text.lower() != model_name.lower():
-                        logger.debug(f"    ❌ 视频属于其他模特: {other_text}")
-                        return False
-            
-            # 如果没有其他模特标识，在模特页面上的视频通常属于该模特
-            logger.debug(f"    ✅ 在模特页面上，默认认为视频属于: {model_name}")
+            logger.debug(f"    ✅ 在模特专属页面上，认为视频属于: {model_name}")
             return True
         
-        # 方法4: 更宽松的匹配（用于处理模糊情况）
-        # 如果以上方法都无法确定，采用较宽松的策略
-        logger.debug(f"    ⚠️ 无法明确验证视频归属，采用宽松匹配策略")
-        return True  # 默认允许，避免过度过滤
+        # 方法4: 更严格的默认策略
+        logger.debug(f"    ⚠️ 无法明确验证视频归属，默认拒绝")
+        return False  # 默认拒绝，避免错误归类
         
     except Exception as e:
-        logger.debug(f"    ⚠️ 模特验证出现异常: {e}，默认允许视频")
-        return True  # 出现异常时保守处理
+        logger.debug(f"    ⚠️ 模特验证出现异常: {e}，默认拒绝视频")
+        return False  # 出现异常时保守处理
 
 
 def clean_porn_title(title: str, patterns: List[str]) -> str:
