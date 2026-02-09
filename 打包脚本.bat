@@ -18,7 +18,10 @@ if errorlevel 1 (
     )
 )
 
-echo [1/5] 清理旧的打包文件...
+echo [重要] 此脚本将在打包完成后自动清理临时测试文件
+echo.
+
+echo [1/5] 清理旧的打包文件和临时测试文件...
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
 if exist "*.spec" del /f /q "*.spec"
@@ -94,6 +97,9 @@ pyinstaller --clean ^
     --hidden-import charset_normalizer ^
     --hidden-import core.modules ^
     --hidden-import core.modules.common ^
+    --hidden-import core.modules.common.async_downloader ^
+    --hidden-import core.modules.common.database_storage ^
+    --hidden-import core.modules.common.intelligent_scheduler ^
     --hidden-import core.modules.porn ^
     --hidden-import core.modules.porn.downloader ^
     --hidden-import core.modules.porn.downloader_v3_fixed ^
@@ -147,18 +153,18 @@ if not exist "dist\requirements.txt" (
 echo      完成!
 echo.
 
-echo [5/5] 打包完成!
+echo [5/5] 清理临时测试文件...
+del /f /q "*测试*.bat" 2>nul
+del /f /q "*验证*.bat" 2>nul
+del /f /q "*check*.bat" 2>nul
+del /f /q "*sync*.bat" 2>nul
+echo      临时测试文件已清理!
 echo.
+
 echo ========================================
-echo 打包文件位置: dist\模特查重管理系统.exe
+echo ✅ 打包完成! 
+echo 可执行文件位置: dist\模特查重管理系统.exe
 echo ========================================
-echo.
-echo 提示:
-echo 1. 首次运行会自动下载 ChromeDriver
-echo 2. 确保安装了 Chrome 浏览器
-echo 3. 配置文件会自动生成
-echo 4. PORN模块支持视频下载功能 (支V1-Standard和V3-Advanced两个版本)
-echo 5. JAVDB模块专注于内容管理，无下载功能
-echo 6. 支持porn和JAV分类目录配置
+pause
 echo.
 pause

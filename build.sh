@@ -94,6 +94,9 @@ pyinstaller --clean \
     --hidden-import charset_normalizer \
     --hidden-import core.modules \
     --hidden-import core.modules.common \
+    --hidden-import core.modules.common.async_downloader \
+    --hidden-import core.modules.common.database_storage \
+    --hidden-import core.modules.common.intelligent_scheduler \
     --hidden-import core.modules.porn \
     --hidden-import core.modules.porn.downloader \
     --hidden-import core.modules.porn.downloader_v3_fixed \
