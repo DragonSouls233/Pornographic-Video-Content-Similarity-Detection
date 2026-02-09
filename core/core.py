@@ -662,15 +662,50 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 logger.error("\n" + "=" * 60)
                 logger.error("❌ 代理连接检查失败！")
                 logger.error("=" * 60)
-                logger.error("\n请根据上述建议检查代理配置")
-                logger.error("\n程序将继续运行，但可能出现网络问题")
+                logger.error("\n检测到的问题：")
+                # 正确访问ComprehensiveProxyCheck的属性
+                test_results = [
+                    ("基础TCP连接", check_result.basic_connectivity.success, check_result.basic_connectivity.error_message),
+                    ("HTTP访问", check_result.http_access.success, check_result.http_access.error_message),
+                    ("HTTPS访问", check_result.https_access.success, check_result.https_access.error_message)
+                ]
+                
+                # 添加目标网站测试结果
+                for target_result in check_result.target_websites:
+                    test_results.append((
+                        f"目标网站({target_result.host})", 
+                        target_result.success, 
+                        target_result.error_message
+                    ))
+                
+                for test_name, status, message in test_results:
+                    if not status:
+                        logger.error(f"  • {test_name}: {message}")
+                
+                logger.error("\n可能的解决方案：")
+                logger.error("  1. 检查代理服务是否正在运行")
+                logger.error("  2. 验证代理地址和端口配置")
+                logger.error("  3. 确认代理认证信息（如有）")
+                logger.error("  4. 检查防火墙设置")
+                logger.error("  5. 尝试禁用代理使用直连")
                 logger.error("=" * 60)
                 
-                # 询问用户是否继续
-                user_input = input("\n是否继续运行程序？(y/N): ").strip().lower()
-                if user_input not in ['y', 'yes']:
-                    logger.info("用户选择退出程序")
-                    sys.exit(1)
+                # 询问用户是否继续（仅在有控制台的情况下）
+                try:
+                    # 检查是否有可用的stdin
+                    if sys.stdin and sys.stdin.isatty():
+                        user_input = input("\n是否继续运行程序？(y/N): ").strip().lower()
+                        if user_input not in ['y', 'yes']:
+                            logger.info("用户选择退出程序")
+                            sys.exit(1)
+                    else:
+                        # 无控制台环境，默认继续运行
+                        logger.info("\n⚠️  无控制台环境，程序将自动继续运行")
+                        logger.info("提示：如需交互，请在命令行中运行程序")
+                except (RuntimeError, EOFError):
+                    # 打包环境下的异常处理
+                    logger.info("\n⚠️  无法获取用户输入，程序将自动继续运行")
+                    logger.info("提示：代理检查失败，程序仍会继续执行，但可能出现网络问题")
             else:
                 logger.info("✅ 代理连接检查通过，继续执行...\n")
         else:

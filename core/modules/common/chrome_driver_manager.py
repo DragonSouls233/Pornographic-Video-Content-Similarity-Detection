@@ -303,6 +303,10 @@ class ChromeDriverManager:
             driver_path = self.get_driver_path()
             temp_path = driver_path.with_suffix('.tmp')
             
+            # 如果临时文件已存在，先删除
+            if temp_path.exists():
+                temp_path.unlink()
+            
             logger.info(f"正在下载: {download_url}")
             urllib.request.urlretrieve(download_url, temp_path)
             

@@ -108,8 +108,14 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
                 if title_elem:
                     title = title_elem.get_text(strip=True)
                     if title and len(title) > 3 and len(title) < 500:  # 过滤太长或太短的
-                        # 过滤掉明显是UI元素的文本
-                        if any(keyword in title.lower() for keyword in ['share', '分享', '收藏', 'report', '举报', '下载', 'download', '广告', 'advertisement']):
+                        # 过滤掉明显是非视频内容的文本
+                        excluded_keywords = [
+                            'share', '分享', '收藏', 'report', '举报', '下载', 'download',
+                            '广告', 'advertisement', 'photo', '照片', '图片', 'image',
+                            'album', '相册', 'gallery', '画廊', 'picture', '壁纸',
+                            'gif', '动图', 'avatar', '头像', 'profile'
+                        ]
+                        if any(keyword in title.lower() for keyword in excluded_keywords):
                             continue
                         
                         cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
@@ -128,9 +134,18 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
                         if not video_url:
                             for link in container.find_all('a', href=True):
                                 href = link.get('href')
-                                if href and ('/view_video' in href or '/pornstar/' not in href):
-                                    video_url = href
-                                    break
+                                if href:
+                                    # 严格的视频URL过滤 - 只保留真正的视频链接
+                                    if ('/view_video' in href and 
+                                        'photo=' not in href and
+                                        'image=' not in href and
+                                        '/photo/' not in href and 
+                                        '/album/' not in href and 
+                                        '/gallery/' not in href and
+                                        '/pictures/' not in href and
+                                        '/images/' not in href):
+                                        video_url = href
+                                        break
                         
                         if video_url:
                             if not video_url.startswith('http'):
@@ -169,8 +184,13 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
                     for elem in video_area.select('a.title, a[href*="view_video"], span.title'):
                         title = elem.get_text(strip=True)
                         if title and len(title) > 3 and len(title) < 500:
-                            # 再次过滤非视频标题
-                            if any(keyword in title.lower() for keyword in ['share', '分享', '收藏', 'report', '举报', '下载']):
+                            # 过滤非视频内容
+                            excluded_keywords = [
+                                'share', '分享', '收藏', 'report', '举报', '下载',
+                                'photo', '照片', '图片', 'image', 'album', '相册',
+                                'gallery', '画廊', 'picture', '壁纸', 'gif', '动图'
+                            ]
+                            if any(keyword in title.lower() for keyword in excluded_keywords):
                                 continue
                             
                             cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
