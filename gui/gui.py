@@ -55,6 +55,10 @@ class ModelManagerGUI:
         self.result_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.result_tab, text="结果显示")
         
+        # 创建下载进度标签页
+        self.download_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.download_tab, text="下载进度")
+        
         # 创建浏览器/代理测试标签页（合并）
         self.browser_proxy_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.browser_proxy_tab, text="浏览器/代理测试")
@@ -63,6 +67,7 @@ class ModelManagerGUI:
         self.init_model_tab()
         self.init_run_tab()
         self.init_result_tab()
+        self.init_download_tab()  # 新添加
         self.init_browser_proxy_tab()
         
         # 加载模特数据
@@ -414,6 +419,58 @@ class ModelManagerGUI:
         # 导出按钮
         ttk.Button(action_frame, text="导出结果", command=self.export_results).pack(side=tk.RIGHT)
     
+    def init_download_tab(self):
+        """初始化下载进度标签页"""
+        # 创建主框架
+        main_frame = ttk.Frame(self.download_tab, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 上半部 - 进度显示
+        progress_frame = ttk.LabelFrame(main_frame, text="下载进度", padding="10")
+        progress_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # 当前文件信息
+        ttk.Label(progress_frame, text="当前文件:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.download_file_var = tk.StringVar(value="正常槈")
+        ttk.Label(progress_frame, textvariable=self.download_file_var, foreground="blue").grid(row=0, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # 下载速度
+        ttk.Label(progress_frame, text="下载速度:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.download_speed_var_tab = tk.StringVar(value="0 KB/s")
+        ttk.Label(progress_frame, textvariable=self.download_speed_var_tab, foreground="green").grid(row=1, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # 下载进度条
+        ttk.Label(progress_frame, text="整体进度:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.download_progress_var_tab = tk.DoubleVar(value=0)
+        progress_bar = ttk.Progressbar(progress_frame, variable=self.download_progress_var_tab, maximum=100, length=400)
+        progress_bar.grid(row=2, column=1, sticky=tk.EW, padx=10, pady=5)
+        
+        # 进度百分比
+        self.download_percentage_var_tab = tk.StringVar(value="0%")
+        ttk.Label(progress_frame, textvariable=self.download_percentage_var_tab).grid(row=2, column=2, padx=10, pady=5)
+        
+        # 下载数据量
+        ttk.Label(progress_frame, text="下载数据量:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.download_size_var_tab = tk.StringVar(value="0 B / 0 B")
+        ttk.Label(progress_frame, textvariable=self.download_size_var_tab).grid(row=3, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # 完成数量
+        ttk.Label(progress_frame, text="已下载 / 总数:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        self.download_count_var_tab = tk.StringVar(value="0 / 0")
+        ttk.Label(progress_frame, textvariable=self.download_count_var_tab).grid(row=4, column=1, sticky=tk.W, padx=10, pady=5)
+        
+        # 下半部 - 日志
+        log_frame = ttk.LabelFrame(main_frame, text="下载日志", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 創建日志文本框
+        scrollbar = ttk.Scrollbar(log_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.download_log_text_tab = tk.Text(log_frame, height=20, wrap=tk.WORD, yscrollcommand=scrollbar.set, font=("Consolas", 9))
+        self.download_log_text_tab.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.download_log_text_tab.yview)
+    
     def init_browser_proxy_tab(self):
         """初始化浏览器/代理测试标签页（合并）"""
         # 创建主框架
@@ -749,15 +806,16 @@ class ModelManagerGUI:
         for item in self.model_tree.get_children():
             self.model_tree.delete(item)
         
-        # 统计各模块数量
+        # 统计各模块数量和不完整的模特
         porn_count = 0
         javdb_count = 0
+        models_without_url = []  # 记录不完整的模特
         
         # 添加模特数据
         for model_name, model_info in self.models.items():
             if isinstance(model_info, dict):
                 module = model_info.get("module", "JAVDB")
-                url = model_info.get("url", "")
+                url = model_info.get("url", "").strip()  # 添加strip()来需除空白符
                 
                 # 统计
                 if module == "PORN":
@@ -765,38 +823,53 @@ class ModelManagerGUI:
                 else:
                     javdb_count += 1
                 
+                # 检查URL是否不完整
+                if not url:
+                    models_without_url.append((model_name, module))
+                
                 # 根据模块筛选显示
                 selected_module = self.model_module_var.get()
                 if selected_module == "全部" or selected_module == module:
-                    self.model_tree.insert("", tk.END, values=(model_name, module, url))
+                    # 如果URL为None，也显示为空字符串
+                    display_url = url if url else "(\u9700要添加)"
+                    self.model_tree.insert("", tk.END, values=(model_name, module, display_url))
         
         # 更新统计信息
         self.model_count_var.set(f"模特数量: {len(self.models)} (PORN: {porn_count}, JAVDB: {javdb_count})")
+        
+        # 如果有不完整的模特，显示警告
+        if models_without_url:
+            missing_info = "\n".join([f"- {name} ({module})" for name, module in models_without_url])
+            # 仅在控制台打印警告，不中断程序
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"发现 {len(models_without_url)} 个模特下载链接不完整:\n{missing_info}")
     
     def filter_models_by_module(self, event=None):
         """根据模块筛选模特"""
         self.update_model_list()
     
     def search_models(self):
-        """搜索模特"""
+        """浅索模特"""
         search_term = self.search_var.get().lower()
         selected_module = self.model_module_var.get()
-        
+            
         # 清空现有列表
         for item in self.model_tree.get_children():
             self.model_tree.delete(item)
-        
+            
         # 添加匹配的模特
         for model_name, model_info in self.models.items():
             if isinstance(model_info, dict):
                 module = model_info.get("module", "JAVDB")
-                url = model_info.get("url", "")
-                
+                url = model_info.get("url", "").strip()
+                    
                 # 根据模块筛选
                 if selected_module == "全部" or selected_module == module:
-                    # 搜索匹配
+                    # 浅索匹配
                     if search_term in model_name.lower() or search_term in url.lower():
-                        self.model_tree.insert("", tk.END, values=(model_name, module, url))
+                        display_url = url if url else "(\u9700\u8981\u6dfb\u52a0)"
+                        self.model_tree.insert("", tk.END, values=(model_name, module, display_url))
     
     def add_model(self):
         """添加模特"""
@@ -993,7 +1066,14 @@ class ModelManagerGUI:
         
         # 获取选中项的数据
         item = selected_items[0]
-        model_name, module, url = self.model_tree.item(item, "values")
+        values = self.model_tree.item(item, "values")
+        model_name = values[0]
+        module = values[1]
+        url = values[2]
+        
+        # 处理"(需要添加)"\u663e示
+        if url == "(\u9700要\u6dfb加)":
+            url = ""
         
         # 创建对话框
         dialog = tk.Toplevel(self.root)
@@ -2496,8 +2576,17 @@ class ModelManagerGUI:
         """添加下载日志消息"""
         try:
             timestamp = time.strftime("%H:%M:%S")
-            self.download_log_text.insert(tk.END, f"[{timestamp}] {message}\n")
-            self.download_log_text.see(tk.END)
+            log_msg = f"[{timestamp}] {message}\n"
+            
+            # 同时书写到旧的日志框（如果存在）和新的标签页日志框
+            if hasattr(self, 'download_log_text') and self.download_log_text.winfo_exists():
+                self.download_log_text.insert(tk.END, log_msg)
+                self.download_log_text.see(tk.END)
+            
+            if hasattr(self, 'download_log_text_tab') and self.download_log_text_tab.winfo_exists():
+                self.download_log_text_tab.insert(tk.END, log_msg)
+                self.download_log_text_tab.see(tk.END)
+            
             self.root.update_idletasks()
         except Exception as e:
             print(f"添加下载日志失败: {e}")
