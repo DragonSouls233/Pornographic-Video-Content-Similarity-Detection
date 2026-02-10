@@ -149,7 +149,7 @@ class UnifiedDownloader:
             # 执行下载
             if version == self.VERSION_V1:
                 logger.info(f"🔄 V1-Standard开始下载...")
-                result = self.downloader_v1.download_single_video(url, save_dir)
+                result = self.downloader_v1.download_video(url, save_dir)
                 result['version'] = self.VERSION_V1
                 
                 # 如果失败且启用降级，尝试V3

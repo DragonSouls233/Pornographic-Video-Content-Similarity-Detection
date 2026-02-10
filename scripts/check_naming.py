@@ -55,13 +55,13 @@ class NamingChecker:
     def print_report(self):
         """打印检查报告"""
         if not self.violations:
-            print("✅ 所有命名都符合规范！")
+            print("[OK] 所有命名都符合规范！")
             return
-        
+
         print("=" * 80)
-        print("❌ 命名规范检查报告")
+        print("[报告] 命名规范检查报告")
         print("=" * 80)
-        
+
         # 按文件分组
         violations_by_file = {}
         for violation in self.violations:
@@ -69,16 +69,16 @@ class NamingChecker:
             if file_path not in violations_by_file:
                 violations_by_file[file_path] = []
             violations_by_file[file_path].append(violation)
-        
+
         # 打印每个文件的违规情况
         for file_path, file_violations in violations_by_file.items():
-            print(f"\n📄 {file_path}")
+            print(f"\n[文件] {file_path}")
             print("-" * 60)
-            
+
             for violation in file_violations:
                 line_info = f"行 {violation['line']}" if violation['line'] else ""
                 print(f"  {line_info:>8} {violation['type']:<20} {violation['message']}")
-        
+
         print("\n" + "=" * 80)
         print(f"总计发现 {len(self.violations)} 个命名规范问题")
 
@@ -197,7 +197,7 @@ class NamingVisitor(ast.NodeVisitor):
 def main():
     """主函数"""
     project_root = Path(__file__).parent.parent
-    print(f"🔍 检查项目命名规范: {project_root}")
+    print(f"[检查] 项目命名规范: {project_root}")
     
     checker = NamingChecker(str(project_root))
     violations = checker.check_naming_conventions()
