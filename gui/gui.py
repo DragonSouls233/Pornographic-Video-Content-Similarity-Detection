@@ -1635,7 +1635,11 @@ class ModelManagerGUI:
             import logging
             
             # 配置日志捕获
-            # 🚨 修复：使用预先定义的QueueHandler类
+            # 🚨 修复：使用预先定义的QueueHandler类，添加安全检查
+            if not hasattr(self, 'QueueHandler'):
+                # 如果QueueHandler未定义，重新初始化
+                self._setup_queue_handler()
+            
             queue_handler = self.QueueHandler(self)
             queue_handler.setLevel(logging.INFO)
             queue_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
