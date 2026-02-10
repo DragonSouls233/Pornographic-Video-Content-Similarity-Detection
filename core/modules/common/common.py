@@ -12,6 +12,29 @@ from datetime import datetime
 from pathlib import Path
 from typing import Set, List, Tuple, Dict, Optional
 
+# 路径工具函数 - 修复打包后的路径问题
+def get_app_path():
+    """
+    获取应用程序路径
+    打包后返回可执行文件所在目录，开发环境返回项目根目录
+    """
+    if getattr(sys, 'frozen', False):
+        # 打包后的环境
+        return os.path.dirname(sys.executable)
+    else:
+        # 开发环境
+        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def get_config_path(filename):
+    """
+    获取配置文件路径
+    确保配置文件保存在正确位置
+    """
+    app_path = get_app_path()
+    return os.path.join(app_path, filename)
+
+
 # --- 日志配置 ---
 def setup_logging(log_dir: str, config_name: str = "main"):
     """配置日志系统，返回日志器"""
@@ -59,6 +82,10 @@ def setup_logging(log_dir: str, config_name: str = "main"):
 def load_config(config_path: str = "config.yaml") -> dict:
     """加载YAML配置文件，如果不存在则自动创建默认配置"""
     try:
+        # 使用正确的路径
+        if not os.path.isabs(config_path):
+            config_path = get_config_path(config_path)
+
         if not os.path.exists(config_path):
             # 自动生成默认配置文件
             default_config = {
@@ -99,21 +126,25 @@ def load_config(config_path: str = "config.yaml") -> dict:
 
 def load_models(model_path: str = "models.json") -> dict:
     """加载模特配置JSON文件，如果不存在则自动创建空文件
-    
+
     支持两种格式：
     1. 旧格式：{"模特名": "URL"}
     2. 新格式：{"模特名": {"module": "PORN/JAVDB", "url": "..."}}
-    
+
     返回值：统一转换为 {"模特名": "URL"} 格式以兼容现有代码
     """
     try:
+        # 使用正确的路径
+        if not os.path.isabs(model_path):
+            model_path = get_config_path(model_path)
+
         if not os.path.exists(model_path):
             # 自动生成空的模特配置文件
             with open(model_path, 'w', encoding='utf-8') as f:
                 json.dump({}, f, ensure_ascii=False, indent=2)
             print(f"模特配置文件不存在，已自动创建空文件: {model_path}")
             return {}
-        
+
         with open(model_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             

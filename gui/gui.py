@@ -13,6 +13,28 @@ import sys
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
+# 路径工具函数 - 修复打包后的路径问题
+def get_app_path():
+    """
+    获取应用程序路径
+    打包后返回可执行文件所在目录，开发环境返回项目根目录
+    """
+    if getattr(sys, 'frozen', False):
+        # 打包后的环境
+        return os.path.dirname(sys.executable)
+    else:
+        # 开发环境
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_config_path(filename):
+    """
+    获取配置文件路径
+    确保配置文件保存在正确位置
+    """
+    app_path = get_app_path()
+    return os.path.join(app_path, filename)
+
 # 导入默认配置模板
 try:
     from gui.config_template import DEFAULT_CONFIG
@@ -1150,7 +1172,9 @@ class ModelManagerGUI:
     def save_models(self):
         """保存模特数据"""
         try:
-            with open("models.json", "w", encoding="utf-8") as f:
+            # 使用正确的路径
+            config_path = get_config_path("models.json")
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(self.models, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
@@ -1659,9 +1683,9 @@ class ModelManagerGUI:
                 # 替换core模块的日志处理器
                 original_logger = logging.getLogger()
                 original_handlers = original_logger.handlers.copy()
-                
-                # 创建队列处理器
-                queue_handler = QueueHandler()
+
+                # 创建队列处理器 - 使用self.QueueHandler
+                queue_handler = self.QueueHandler(self)
                 queue_handler.setLevel(logging.INFO)
                 queue_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
                 queue_handler.queue = self.queue
@@ -2189,7 +2213,9 @@ class ModelManagerGUI:
                 "porn": self.porn_dir_var.get().strip() if self.porn_dir_var.get() else "",
                 "jav": self.jav_dir_var.get().strip() if self.jav_dir_var.get() else ""
             }
-            with open("local_dirs.json", "w", encoding="utf-8") as f:
+            # 使用正确的路径
+            config_path = get_config_path("local_dirs.json")
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(dirs_config, f, ensure_ascii=False, indent=2)
         except Exception as e:
             pass
@@ -2197,8 +2223,10 @@ class ModelManagerGUI:
     def load_local_dirs(self):
         """加载本地目录配置"""
         try:
-            if os.path.exists("local_dirs.json"):
-                with open("local_dirs.json", "r", encoding="utf-8") as f:
+            # 使用正确的路径
+            config_path = get_config_path("local_dirs.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
                     dirs_config = json.load(f)
                     # 兼容旧版本格式
                     if isinstance(dirs_config, list):

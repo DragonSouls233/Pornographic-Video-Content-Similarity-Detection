@@ -74,12 +74,7 @@ filename_cleaning:
     normalize_spaces: true
     trim: true
 local_roots:
-  general:
-  - F:/作品
-  jav:
-  - F:/作品
-  porn:
-  - F:/作品
+  - F:/pron验证
 local_scan:
   category_scan:
     general:
