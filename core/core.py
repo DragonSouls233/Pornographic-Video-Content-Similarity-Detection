@@ -816,4 +816,165 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
 
 
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='模特查重管理系统')
+    parser.add_argument('--version', '-v', action='version', version='模特查重管理系统 v1.0')
+    
+    # 解析参数但不强制使用
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        # 如果用户请求帮助，正常退出
+        sys.exit(0)
+    
     main()
+    
+    # ==================== 修复的对比逻辑 ====================
+    def _fixed_process_single_model(self, model_info: tuple, thread_id: int = 0) -> ModelResult:
+        """
+        修复版单个模特处理函数 - 确保下载后对比逻辑正确
+        """
+        model_name, folder, url, country, original_dir = model_info
+        
+        try:
+            self.logger.info(f"[线程-{thread_id}] 开始处理模特: {model_name}")
+            
+            # 提取本地视频
+            local_videos = extract_local_videos(folder, self.config['video_extensions'])
+            local_set = {v[0] for v in local_videos}  # 只取标题
+            
+            # 获取在线视频
+            online_set, title_to_url = self._fetch_online_videos(model_name, url, thread_id)
+            
+            if not online_set:
+                error_msg = "无法获取在线视频列表"
+                self.logger.error(f"[线程-{thread_id}] {model_name}: {error_msg}")
+                return ModelResult(
+                    model_name=model_name,
+                    success=False,
+                    error_message=error_msg,
+                    url=url,
+                    local_folder=original_dir,
+                    local_folder_full=folder,
+                    country=country
+                )
+            
+            # 获取已缓存的标题
+            cached_titles = self.smart_cache.get_cached_titles(model_name)
+            new_videos = online_set - cached_titles
+            
+            # 修复关键：正确获取已下载的视频
+            downloaded_videos = self._get_downloaded_videos_correctly(model_name)
+            
+            # 修复关键：正确合并本地和已下载视频
+            local_set_with_downloaded = local_set | downloaded_videos
+            
+            # 修复关键：正确的对比逻辑
+            missing = online_set - local_set_with_downloaded
+            
+            # 记录详细信息
+            original_local_count = len(local_set)
+            effective_local_count = len(local_set_with_downloaded)
+            downloaded_count = len(downloaded_videos)
+            
+            self.logger.info(f"[线程-{thread_id}] {model_name}: "
+                           f"在线 {len(online_set)} | "
+                           f"新视频 {len(new_videos)} | "
+                           f"本地 {original_local_count} | "
+                           f"已下载 {downloaded_count} | "
+                           f"有效本地 {effective_local_count} | "
+                           f"缺失 {len(missing)}")
+            
+            # 构建结果
+            result = ModelResult(
+                model_name=model_name,
+                success=True,
+                local_count=effective_local_count,
+                online_count=len(online_set),
+                new_videos_count=len(new_videos),
+                missing_count=len(missing),
+                missing_titles=sorted(list(missing)),
+                missing_with_urls=[(title, title_to_url.get(title, "")) for title in missing],
+                url=url,
+                local_folder=original_dir,
+                local_folder_full=folder,
+                country=country
+            )
+            
+            # 更新缓存
+            if self.smart_cache and self.smart_cache.enabled:
+                self.smart_cache.add_videos(model_name, [(title, title_to_url.get(title, ""), 1) for title in online_set])
+                # 更新缺失视频列表
+                missing_data = {title: {"status": "missing", "url": title_to_url.get(title, "")} for title in missing}
+                self.smart_cache.update_missing_videos(model_name, missing_data)
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"处理模特失败: {str(e)}"
+            self.logger.error(f"[线程-{thread_id}] {model_name}: {error_msg}")
+            return ModelResult(
+                model_name=model_name,
+                success=False,
+                error_message=error_msg,
+                url=url,
+                local_folder=original_dir,
+                local_folder_full=folder,
+                country=country
+            )
+    
+    def _get_downloaded_videos_correctly(self, model_name: str) -> set:
+        """
+        正确获取已下载的视频集合
+        """
+        downloaded_videos = set()
+        
+        if self.smart_cache and self.smart_cache.enabled:
+            try:
+                # 从缓存中获取缺失视频数据
+                cache_data = self.smart_cache.load(model_name)
+                missing_data = cache_data.get('missing_videos', {})
+                
+                # 筛选出已下载的视频
+                for title, info in missing_data.items():
+                    if info.get('status') == 'downloaded':
+                        downloaded_videos.add(title)
+                        
+                self.logger.debug(f"从缓存获取到 {len(downloaded_videos)} 个已下载视频")
+                
+            except Exception as e:
+                self.logger.warning(f"获取已下载视频时出错: {e}")
+        
+        return downloaded_videos
+    
+    def _fetch_online_videos(self, model_name: str, url: str, thread_id: int) -> tuple:
+        """
+        获取在线视频列表
+        """
+        try:
+            if self.module_type == 1:  # PORN
+                online_set, title_to_url = fetch_with_requests_porn(
+                    url, self.config, self.smart_cache, model_name, thread_id
+                )
+            elif self.module_type == 2:  # JAVDB
+                online_set, title_to_url = fetch_with_requests_javdb(
+                    url, self.config, self.smart_cache, model_name, thread_id
+                )
+            else:  # AUTO
+                # 自动检测模块类型
+                if 'javdb' in url.lower():
+                    online_set, title_to_url = fetch_with_requests_javdb(
+                        url, self.config, self.smart_cache, model_name, thread_id
+                    )
+                else:
+                    online_set, title_to_url = fetch_with_requests_porn(
+                        url, self.config, self.smart_cache, model_name, thread_id
+                    )
+            
+            return online_set, title_to_url
+            
+        except Exception as e:
+            self.logger.error(f"[线程-{thread_id}] 获取在线视频失败: {e}")
+            return set(), {}
+

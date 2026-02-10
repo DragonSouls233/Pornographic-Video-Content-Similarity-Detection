@@ -4,9 +4,9 @@ cache:
   compress: false
   database_path: output/cache.db
   enabled: true
-  expiration_days: 3650
+  expiration_days: 7
   incremental_update: true
-  max_size_mb: -1
+  max_size_mb: 1000
   page_expiry_hours: 24
   use_database: false
 comparison:
@@ -19,8 +19,8 @@ comparison:
   similarity_threshold: 0.8
   strip_punctuation: true
 delay_between_pages:
-  max: 3.5
-  min: 2.0
+  max: 2.5
+  min: 1.5
 download:
   default_version: auto
   enable_fallback: true
@@ -124,14 +124,17 @@ local_scan:
   ignore_dirs:
   - System Volume Information
   - $RECYCLE.BIN
+  - temp
+  - cache
+  - .git
   ignore_files:
   - Thumbs.db
-  max_depth: -1
+  max_depth: 3
   max_file_size: -1
   min_file_size: 0
   model_dir_pattern: ^\[.*?\]\s*
   scan_timeout: -1
-  thread_count: 3
+  thread_count: 4
 log_dir: logs
 logging:
   backup_count: 5
@@ -146,7 +149,7 @@ logging:
 max_pages: -1
 multithreading:
   enabled: true
-  max_workers: 3
+  max_workers: 4
   thread_name_prefix: Worker
 network:
   backoff_factor: 0.5
@@ -159,11 +162,9 @@ network:
     download_limit: false
     enabled: true
     host: 127.0.0.1
-    http: socks5://127.0.0.1:10808
-    https: socks5://127.0.0.1:10808
+    port: '10808'
     id: ''
     password: ''
-    port: '10808'
     public_ip: 000.000.000.000
     type: socks5
   timeout: 300
@@ -234,9 +235,9 @@ selenium:
   disable_extensions: true
   disable_gpu: true
   headless: true
-  page_load_timeout: 600
+  page_load_timeout: 300
   profile_directory: ''
-  script_timeout: 300
+  script_timeout: 150
   user_data_dir: ''
   window_size: 1920x1080
 use_selenium: true

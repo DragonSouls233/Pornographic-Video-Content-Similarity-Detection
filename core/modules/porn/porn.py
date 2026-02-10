@@ -260,6 +260,11 @@ def fetch_with_selenium_porn(url: str, logger, max_pages: int = -1, config: dict
                                 next_page_num = int(page_param)
                                 if next_page_num <= page_num:
                                     continue
+                                # 🚨 紧急修复：防止无限循环
+                                if next_page_num > 100:
+                                    logger.warning(f"  PORN - Selenium检测到异常大页码 {next_page_num}，停止抓取")
+                                    has_next = False
+                                    break
                         except:
                             pass
                     # 检查按钮是否可用
@@ -432,6 +437,18 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                                 logger.debug(f"    跳过非当前模特的视频: {title[:50]}...")
                                 continue
                             
+                            # 额外的安全检查：确保标题和链接在同一视频容器内
+                            parent_video_link = elem.find_parent('a', href=True)
+                            if parent_video_link:
+                                video_url = parent_video_link.get('href')
+                                if video_url and not video_url.startswith('http'):
+                                    video_url = urljoin(url, video_url)
+                                
+                                # 验证链接是否指向视频页面（而不是其他内容）
+                                if '/view_video.php?' not in video_url and '/video/' not in video_url:
+                                    logger.debug(f"    跳过非视频链接: {video_url[:100]}...")
+                                    continue
+                            
                             cleaned_title = clean_porn_title(title, config.get('filename_clean_patterns', []))
                             page_titles.add(cleaned_title)
                             # 尝试找到父链接
@@ -444,7 +461,7 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                                     title_to_url[cleaned_title] = video_url
                                     page_videos.append((cleaned_title, video_url))
                             else:
-                                logger.debug(f"    注意: 找到了标题『{cleaned_title[:50]}...』但未找到链接父不素")
+                                logger.debug(f"    注意: 找到了标题『{cleaned_title[:50]}...』但未找到链接父元素")
                 
                 if page_titles:
                     prev_count = len(all_titles)
@@ -496,6 +513,11 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                                         if next_page_num <= page_num:
                                             logger.debug(f"  PORN - 忽略无效下一页链接: {href}")
                                             continue
+                                        # 🚨 紧急修复：防止无限循环 - 限制最大页数
+                                        if next_page_num > 100:  # 安全限制
+                                            logger.warning(f"  PORN - 检测到异常大的页码 {next_page_num}，可能存在分页循环，停止抓取")
+                                            has_next = False
+                                            break
                                 except:
                                     pass
                             # 检查按钮是否可见或可用（禁用状态检查）
@@ -523,8 +545,11 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
                         
                         if page_numbers:
                             max_page = max(page_numbers)
-                            current_page = min([int(x) for x in page_numbers if str(x) in str(page_num)]) if page_num in [int(x) for x in page_numbers if str(x).isdigit()] else page_num
-                            if page_num < max_page:
+                            # 🚨 紧急修复：添加安全检查
+                            if max_page > 100:  # 异常大的页数
+                                logger.warning(f"  PORN - 检测到异常页数 {max_page}，可能存在分页错误，停止抓取")
+                                has_next = False
+                            elif page_num < max_page:
                                 logger.debug(f"  PORN - 通用分页检测: 当前页={page_num}, 最大页={max_page}")
                                 has_next = True
                 

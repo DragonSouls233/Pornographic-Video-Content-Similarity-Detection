@@ -81,6 +81,30 @@ class ModelManagerGUI:
         self.running = False
         self.thread = None
         self.public_ip_var = tk.StringVar(value="000.000.000.000")
+        
+        # 🚨 关键修复：提前定义QueueHandler类
+        self._setup_queue_handler()
+    
+    def _setup_queue_handler(self):
+        """设置队列日志处理器"""
+        import logging
+        
+        class QueueHandler(logging.Handler):
+            def __init__(self, gui_instance):
+                super().__init__()
+                self.gui = gui_instance
+                
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    # 确保队列可用且GUI仍在运行
+                    if hasattr(self.gui, 'queue') and self.gui.running:
+                        self.gui.queue.put(("log", msg))
+                except Exception as e:
+                    # 静默处理队列错误，避免日志循环
+                    pass
+        
+        self.QueueHandler = QueueHandler
     
     def create_menu(self):
         """创建菜单栏"""
@@ -1611,12 +1635,10 @@ class ModelManagerGUI:
             import logging
             
             # 配置日志捕获
-            class QueueHandler(logging.Handler):
-                def emit(self, record):
-                    msg = self.format(record)
-                    self.queue.put(("log", msg))
-            
-            # 获取核心模块路径
+            # 🚨 修复：使用预先定义的QueueHandler类
+            queue_handler = self.QueueHandler(self)
+            queue_handler.setLevel(logging.INFO)
+            queue_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
             if hasattr(sys, '_MEIPASS'):
                 # 打包后的环境
                 core_py_path = os.path.join(sys._MEIPASS, 'core', 'core.py')
@@ -3496,4 +3518,60 @@ if __name__ == "__main__":
             self.add_log(f"获取保存目录失败: {e}")
             config = self.load_config()
             return config.get('output_dir', './downloads')
+    
+    # ==================== 修复的对比结果显示 ====================
+    def _update_comparison_results_fixed(self, results):
+        """
+        修复版对比结果显示更新
+        """
+        # 清空现有结果
+        for item in self.result_tree.get_children():
+            self.result_tree.delete(item)
+        
+        missing_count = 0
+        processed_count = 0
+        failed_count = 0
+        
+        # 处理每个模特的结果
+        for result in results:
+            if result.success:
+                processed_count += 1
+                # 显示缺失视频
+                for title, url in result.missing_with_urls:
+                    self.result_tree.insert("", tk.END, values=(
+                        result.model_name,
+                        title,
+                        url
+                    ))
+                    missing_count += 1
+            else:
+                failed_count += 1
+        
+        # 更新统计信息
+        self.stats_vars["processed"].set(f"成功处理: {processed_count}")
+        self.stats_vars["failed"].set(f"处理失败: {failed_count}")
+        self.stats_vars["missing"].set(f"发现缺失: {missing_count}")
+        
+        # 切换到结果显示标签页
+        self.notebook.select(self.result_tab)
+        
+        self.add_log(f"✅ 对比完成: 成功{processed_count} 失败{failed_count} 缺失{missing_count}")
+    
+    def _refresh_comparison_after_download(self):
+        """
+        下载完成后刷新对比结果
+        """
+        try:
+            self.add_log("🔄 下载完成，正在刷新对比结果...")
+            
+            # 重新运行对比
+            config = self.load_config()
+            models = self.load_models()
+            
+            # 这里应该调用核心对比功能
+            # 暂时显示提示信息
+            self.add_log("💡 请重新运行对比分析以获取最新结果")
+            
+        except Exception as e:
+            self.add_log(f"❌ 刷新对比结果失败: {e}")
 

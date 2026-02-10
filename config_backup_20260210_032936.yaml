@@ -1,0 +1,252 @@
+cache:
+  cache_dir: cache
+  cleanup_strategy: none
+  compress: false
+  database_path: output/cache.db
+  enabled: true
+  expiration_days: 7
+  incremental_update: true
+  max_size_mb: 1000
+  page_expiry_hours: 24
+  use_database: false
+comparison:
+  case_sensitive: false
+  ignore_list:
+  - Sample Video
+  - Test Video
+  match_strategy: fuzzy
+  mode: new_only
+  similarity_threshold: 0.8
+  strip_punctuation: true
+delay_between_pages:
+  max: 2.5
+  min: 1.5
+download:
+  default_version: auto
+  enable_fallback: true
+  max_workers: 4
+  output_dir: downloads
+  retry_count: 3
+  retry_delay: 5
+  timeout: 300
+  v1:
+    cookies_file: ''
+    enable_cookies: false
+    preferred_quality: best
+  v3:
+    headless: true
+    page_load_timeout: 30
+error_handling:
+  alert_threshold: 10
+  collect_statistics: true
+  detailed_error_reports: true
+  error_categories:
+    network: retry
+    parsing: skip
+    permission: warn
+  max_retries: 3
+  retry_delay: 5
+  strategy: continue
+filename_clean_patterns:
+- ^\[Channel\]\s*
+- _\d{3,4}x\d{3,4}
+- _\d{8}
+- \[.*?\]
+- \(.*?\)
+- \d{3,4}p
+- HD|FHD|UHD|4K
+- web[-_]?dl|webrip|bluray|dvdrip
+filename_cleaning:
+  character_mapping:
+    –: '-'
+    　: ' '
+  clean_order:
+  - brackets
+  - parentheses
+  - resolution
+  - date
+  - special_chars
+  clean_patterns:
+  - ^\[Sample\]\s*
+  enabled: true
+  post_cleanup:
+    lowercase: false
+    normalize_spaces: true
+    trim: true
+local_roots:
+  general:
+  - F:/作品
+  jav:
+  - F:/作品
+  porn:
+  - F:/作品
+local_scan:
+  category_scan:
+    general:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      ignore_files:
+      - Thumbs.db
+      max_depth: 2
+      model_dir_pattern: ^\[.*?\]\s*
+    jav:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      - private
+      - system
+      ignore_files:
+      - Thumbs.db
+      - desktop.ini
+      max_depth: 4
+      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
+      model_patterns:
+      - ^([A-Za-z]{3,20})$
+      - ^([A-Za-z0-9_-]+)$
+      - ^([\u3040-\u309F\u30A0-\u30FF]+)$
+    porn:
+      ignore_dirs:
+      - System Volume Information
+      - $RECYCLE.BIN
+      - private
+      - system
+      ignore_files:
+      - Thumbs.db
+      - desktop.ini
+      max_depth: 3
+      model_dir_pattern: ^\[.*?\]\s*|^([A-Za-z0-9_-]+)$
+      model_patterns:
+      - ^([A-Z][a-z]+[A-Z][a-z]+)$
+      - ^([A-Za-z]{3,20})$
+      - ^([A-Za-z0-9_-]+)$
+  follow_symlinks: false
+  ignore_dirs:
+  - System Volume Information
+  - $RECYCLE.BIN
+  - temp
+  - cache
+  - .git
+  ignore_files:
+  - Thumbs.db
+  max_depth: 3
+  max_file_size: -1
+  min_file_size: 0
+  model_dir_pattern: ^\[.*?\]\s*
+  scan_timeout: -1
+  thread_count: 4
+log_dir: logs
+logging:
+  backup_count: 5
+  console: true
+  countries_log_structure: true
+  datefmt: '%Y-%m-%d %H:%M:%S'
+  encoding: utf-8
+  format: '%(asctime)s | %(levelname)-8s | %(message)s'
+  level: INFO
+  max_bytes: 10485760
+  missing_video_detail: true
+max_pages: -1
+multithreading:
+  enabled: true
+  max_workers: 4
+  thread_name_prefix: Worker
+network:
+  backoff_factor: 0.5
+  headers:
+    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+    Accept-Language: zh-CN,zh;q=0.9,en;q=0.8
+  pool_size: 10
+  proxy:
+    bypass_dpi: false
+    download_limit: false
+    enabled: true
+    host: 127.0.0.1
+    http: socks5://127.0.0.1:10808
+    https: socks5://127.0.0.1:10808
+    id: ''
+    password: ''
+    port: '10808'
+    public_ip: 000.000.000.000
+    type: socks5
+  timeout: 300
+  user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+  verify_ssl: true
+output:
+  category_output:
+    general:
+      directory_structure: general/category
+      filename_pattern: general_{timestamp}_{type}
+      formats:
+      - txt
+    jav:
+      directory_structure: jav/studio/model
+      filename_pattern: jav_{timestamp}_{type}
+      formats:
+      - txt
+      - json
+    porn:
+      directory_structure: porn/country/model
+      filename_pattern: porn_{timestamp}_{type}
+      formats:
+      - txt
+      - json
+  compress: false
+  directory_structure: country/model
+  encoding: utf-8
+  filename_pattern: '{timestamp}_{type}'
+  formats:
+  - txt
+  - json
+  max_file_size: -1
+  merge_reports:
+    enabled: true
+    include_categories:
+    - porn
+    - jav
+    - general
+    output_file: merged_similarity_report
+  overwrite_existing: true
+  retention_days: -1
+output_dir: output
+porn:
+  cookies_file: ''
+  download_options:
+    download_thumbnail: true
+    max_resolution: 0
+    max_retries: 3
+    preferred_format: mp4
+    timeout: 300
+  missing_log_template: simple
+proxy:
+  bypass_dpi: false
+  download_limit: false
+  enabled: false
+  host: 127.0.0.1
+  http: ''
+  https: ''
+  id: ''
+  password: ''
+  port: '10808'
+  public_ip: 000.000.000.000
+  type: socks5
+retry_on_fail: 2
+selenium:
+  browser: chrome
+  chromedriver_path: ''
+  disable_extensions: true
+  disable_gpu: true
+  headless: true
+  page_load_timeout: 300
+  profile_directory: ''
+  script_timeout: 150
+  user_data_dir: ''
+  window_size: 1920x1080
+use_selenium: true
+video_extensions:
+- .mp4
+- .mkv
+- .avi
+- .mov
+- .wmv
+- .flv
