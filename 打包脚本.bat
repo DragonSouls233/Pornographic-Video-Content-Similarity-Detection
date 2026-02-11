@@ -107,6 +107,10 @@ pyinstaller --clean ^
     --hidden-import core.modules.porn.porn ^
     --hidden-import core.modules.javdb ^
     --hidden-import core.modules.javdb.scraper ^
+    --hidden-import core.modules.common.model_database ^
+    --hidden-import core.modules.common.db_path_manager ^
+    --hidden-import core.modules.common.db_compatibility ^
+    --hidden-import sqlite3 ^
     --collect-submodules selenium ^
     --collect-submodules webdriver_manager
 
