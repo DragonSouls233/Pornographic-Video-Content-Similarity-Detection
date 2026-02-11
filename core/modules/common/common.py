@@ -140,10 +140,20 @@ def load_models(model_path: str = "models.json", use_database: bool = True) -> d
             from .model_database import ModelDatabase
             db = ModelDatabase('models.db')
             models_dict = db.load_models()
-            logger.debug(f"从数据库加载了 {len(models_dict)} 个模特")
+            
+            # 安全使用logger（如果已初始化）
+            try:
+                logger.debug(f"从数据库加载了 {len(models_dict)} 个模特")
+            except NameError:
+                pass  # logger未初始化，静默忽略
+            
             return models_dict
         except Exception as e:
-            logger.warning(f"数据库加载失败，回退到JSON模式: {e}")
+            # 安全使用logger（如果已初始化）
+            try:
+                logger.warning(f"数据库加载失败，回退到JSON模式: {e}")
+            except NameError:
+                pass  # logger未初始化，静默忽略
             # 回退到JSON模式
             pass
     

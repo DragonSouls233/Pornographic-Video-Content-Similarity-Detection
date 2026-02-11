@@ -6,6 +6,7 @@ import os
 import threading
 import queue
 import time
+import logging
 from datetime import datetime
 from typing import Dict, Optional
 import sys
@@ -47,6 +48,9 @@ class ModelManagerGUI:
         self.root.title("模特查重管理系统")
         self.root.geometry("1000x700")
         self.root.minsize(800, 600)
+        
+        # 初始化logger
+        self.logger = logging.getLogger(__name__)
         
         # 设置图标
         try:
@@ -1180,11 +1184,11 @@ class ModelManagerGUI:
                         "url": url
                     }
                 
-                logger.debug(f"从数据库加载了 {len(self.models)} 个模特")
+                self.logger.debug(f"从数据库加载了 {len(self.models)} 个模特")
                 return self.models
                 
             except Exception as db_error:
-                logger.warning(f"数据库加载失败，回退到JSON模式: {db_error}")
+                self.logger.warning(f"数据库加载失败，回退到JSON模式: {db_error}")
             
             # 回退到JSON模式（原有逻辑）
             # 检查文件是否存在，如果不存在则创建空文件
@@ -1243,7 +1247,7 @@ class ModelManagerGUI:
                 simple_models = {name: info['url'] for name, info in self.models.items()}
                 db_adapter.save_models(simple_models)
                 
-                logger.debug(f"已保存 {len(self.models)} 个模特到数据库")
+                self.logger.debug(f"已保存 {len(self.models)} 个模特到数据库")
                 
                 # 同时保存到JSON作为备份
                 config_path = get_config_path("models.json")
@@ -1253,7 +1257,7 @@ class ModelManagerGUI:
                 return True
                 
             except Exception as db_error:
-                logger.warning(f"数据库保存失败，使用JSON模式: {db_error}")
+                self.logger.warning(f"数据库保存失败，使用JSON模式: {db_error}")
             
             # 回退到JSON模式（原有逻辑）
             config_path = get_config_path("models.json")
