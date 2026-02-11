@@ -1162,8 +1162,31 @@ class ModelManagerGUI:
             return yaml.safe_load(DEFAULT_CONFIG)
     
     def load_models(self):
-        """加载模特数据"""
+        """加载模特数据，优先使用数据库"""
         try:
+            # 首先尝试从数据库加载
+            try:
+                from core.modules.common.model_database import ModelDatabase
+                db = ModelDatabase('models.db')
+                models_dict = db.load_models()
+                
+                # 转换为GUI期望的格式
+                self.models = {}
+                for name, url in models_dict.items():
+                    # 根据URL自动判断模块类型
+                    module = "JAVDB" if "javdb" in url.lower() else "PORN"
+                    self.models[name] = {
+                        "module": module,
+                        "url": url
+                    }
+                
+                logger.debug(f"从数据库加载了 {len(self.models)} 个模特")
+                return self.models
+                
+            except Exception as db_error:
+                logger.warning(f"数据库加载失败，回退到JSON模式: {db_error}")
+            
+            # 回退到JSON模式（原有逻辑）
             # 检查文件是否存在，如果不存在则创建空文件
             if not os.path.exists("models.json"):
                 # 自动生成空的models.json文件
@@ -1209,13 +1232,35 @@ class ModelManagerGUI:
             return {}
     
     def save_models(self):
-        """保存模特数据"""
+        """保存模特数据，优先保存到数据库"""
         try:
-            # 使用正确的路径
+            # 首先尝试保存到数据库
+            try:
+                from core.modules.common.model_database import DatabaseModelAdapter
+                db_adapter = DatabaseModelAdapter('models.db')
+                
+                # 转换为简单字典格式
+                simple_models = {name: info['url'] for name, info in self.models.items()}
+                db_adapter.save_models(simple_models)
+                
+                logger.debug(f"已保存 {len(self.models)} 个模特到数据库")
+                
+                # 同时保存到JSON作为备份
+                config_path = get_config_path("models.json")
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(self.models, f, ensure_ascii=False, indent=2)
+                
+                return True
+                
+            except Exception as db_error:
+                logger.warning(f"数据库保存失败，使用JSON模式: {db_error}")
+            
+            # 回退到JSON模式（原有逻辑）
             config_path = get_config_path("models.json")
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(self.models, f, ensure_ascii=False, indent=2)
             return True
+            
         except Exception as e:
             messagebox.showerror("错误", f"保存模特数据失败: {e}")
             return False

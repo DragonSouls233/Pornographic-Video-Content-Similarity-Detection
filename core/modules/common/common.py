@@ -124,15 +124,30 @@ def load_config(config_path: str = "config.yaml") -> dict:
         print(f"配置文件加载失败: {e}")
         sys.exit(1)
 
-def load_models(model_path: str = "models.json") -> dict:
-    """加载模特配置JSON文件，如果不存在则自动创建空文件
-
-    支持两种格式：
-    1. 旧格式：{"模特名": "URL"}
-    2. 新格式：{"模特名": {"module": "PORN/JAVDB", "url": "..."}}
-
-    返回值：统一转换为 {"模特名": "URL"} 格式以兼容现有代码
+def load_models(model_path: str = "models.json", use_database: bool = True) -> dict:
+    """加载模特配置，支持数据库和JSON两种模式
+    
+    Args:
+        model_path: JSON文件路径（当use_database=False时使用）
+        use_database: 是否使用数据库模式
+    
+    Returns:
+        dict: {"模特名": "URL"} 格式的字典
     """
+    if use_database:
+        try:
+            # 使用数据库模式
+            from .model_database import ModelDatabase
+            db = ModelDatabase('models.db')
+            models_dict = db.load_models()
+            logger.debug(f"从数据库加载了 {len(models_dict)} 个模特")
+            return models_dict
+        except Exception as e:
+            logger.warning(f"数据库加载失败，回退到JSON模式: {e}")
+            # 回退到JSON模式
+            pass
+    
+    # JSON模式（原有逻辑）
     try:
         # 使用正确的路径
         if not os.path.isabs(model_path):
