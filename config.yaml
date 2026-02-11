@@ -74,7 +74,8 @@ filename_cleaning:
     normalize_spaces: true
     trim: true
 local_roots:
-  - F:/pron验证
+  - F:/作品
+  - F:/作品/PORN测试
 local_scan:
   category_scan:
     general:

@@ -629,7 +629,13 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         logger.info("=" * 60)
         logger.info(f"配置文件: config.yaml")
         logger.info(f"模特数量: {len(models)}")
-        logger.info(f"本地目录: {config['local_roots']}")
+        
+        # 显示多目录配置信息
+        local_roots = config['local_roots']
+        logger.info(f"本地目录数量: {len(local_roots)}")
+        for i, root in enumerate(local_roots, 1):
+            logger.info(f"  目录 {i}: {root}")
+        
         logger.info(f"输出目录: {config['output_dir']}")
         logger.info(f"抓取工具: {config.get('scraper', 'selenium')}")
         logger.info(f"最大翻页: {config.get('max_pages', '无限制')}")
@@ -743,6 +749,10 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 logger
             )
         else:
+            # 自动模式：同时扫描PORN和JAVDB格式
+            logger.info("🔄 自动模式 - 同时扫描PORN和JAVDB格式目录")
+            
+            # 分别扫描两种格式
             porn_matches = scan_porn_models(
                 models,
                 config['local_roots'],
@@ -750,6 +760,7 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 config['filename_clean_patterns'],
                 logger
             )
+            
             javdb_matches = scan_javdb_models(
                 models,
                 config['local_roots'],
@@ -757,12 +768,41 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 config['filename_clean_patterns'],
                 logger
             )
+            
+            # 合并结果并去重
             seen_models = set()
-            for match in porn_matches + javdb_matches:
-                if match[0] not in seen_models:
-                    seen_models.add(match[0])
+            local_matches = []
+            
+            # 优先处理PORN格式的结果
+            for match in porn_matches:
+                model_name, folder, original_dir, country = match
+                if model_name not in seen_models:
+                    seen_models.add(model_name)
                     local_matches.append(match)
+                    logger.debug(f"  添加PORN格式模特: {model_name}")
+            
+            # 处理JAVDB格式的结果，避免重复
+            for match in javdb_matches:
+                model_name, folder, original_dir, country = match
+                if model_name not in seen_models:
+                    seen_models.add(model_name)
+                    local_matches.append(match)
+                    logger.debug(f"  添加JAVDB格式模特: {model_name}")
+                else:
+                    # 如果模特已在PORN结果中，合并目录信息
+                    for i, existing_match in enumerate(local_matches):
+                        if existing_match[0] == model_name:
+                            # 合并目录路径
+                            combined_folder = f"{existing_match[1]};{folder}"
+                            combined_original = f"{existing_match[2]};{original_dir}"
+                            local_matches[i] = (model_name, combined_folder, combined_original, existing_match[3])
+                            logger.debug(f"  合并模特目录信息: {model_name}")
+                            break
+            
             logger.info(f"自动模式 - 合并后共找到 {len(local_matches)} 个匹配的本地模特目录")
+            logger.info(f"  PORN格式: {len(porn_matches)} 个")
+            logger.info(f"  JAVDB格式: {len(javdb_matches)} 个")
+            logger.info(f"  去重后: {len(seen_models)} 个唯一模特")
         
         if not local_matches:
             if module_type == 1:

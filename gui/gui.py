@@ -254,8 +254,47 @@ class ModelManagerGUI:
         module_combobox = ttk.Combobox(config_frame, textvariable=self.module_var, values=["auto", "porn", "javdb"], width=10)
         module_combobox.pack(side=tk.LEFT, padx=(5, 20))
         
-        # 本地目录选择 - 分类管理
+        # 本地目录选择 - 多目录管理
         ttk.Label(config_frame, text="本地目录配置:", font=("Arial", 10, "bold")).pack(anchor=tk.W, pady=(10, 5))
+        
+        # 多目录管理框架
+        dirs_management_frame = ttk.LabelFrame(config_frame, text="目录列表管理", padding="10")
+        dirs_management_frame.pack(fill=tk.X, pady=5)
+        
+        # 目录列表显示
+        list_frame = ttk.Frame(dirs_management_frame)
+        list_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # 创建Treeview来显示目录列表
+        columns = ('目录路径', '状态')
+        self.dirs_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=6)
+        
+        # 定义列
+        self.dirs_tree.heading('目录路径', text='目录路径')
+        self.dirs_tree.heading('状态', text='状态')
+        
+        # 设置列宽
+        self.dirs_tree.column('目录路径', width=400)
+        self.dirs_tree.column('状态', width=100)
+        
+        # 添加滚动条
+        dirs_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.dirs_tree.yview)
+        self.dirs_tree.configure(yscrollcommand=dirs_scrollbar.set)
+        
+        # 布局
+        self.dirs_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        dirs_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 目录操作按钮
+        button_frame = ttk.Frame(dirs_management_frame)
+        button_frame.pack(fill=tk.X)
+        
+        ttk.Button(button_frame, text="添加目录", command=self.add_directory, width=12).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="删除选中", command=self.remove_selected_directory, width=12).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="刷新状态", command=self.refresh_directory_status, width=12).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 传统单目录配置（保持兼容性）
+        ttk.Label(config_frame, text="传统配置 (兼容模式):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(15, 5))
         
         # PORN目录配置
         porn_frame = ttk.LabelFrame(config_frame, text="PORN目录", padding="10")
@@ -2220,42 +2259,98 @@ class ModelManagerGUI:
         except Exception as e:
             pass
     
+    def add_directory(self):
+        """添加新的目录到列表"""
+        dir_path = filedialog.askdirectory(title="选择视频目录")
+        if dir_path:
+            # 检查目录是否已存在
+            for child in self.dirs_tree.get_children():
+                if self.dirs_tree.item(child)['values'][0] == dir_path:
+                    messagebox.showwarning("提示", "该目录已存在于列表中")
+                    return
+            
+            # 检查目录状态
+            status = "✓ 可访问" if os.path.exists(dir_path) else "✗ 不存在"
+            self.dirs_tree.insert('', tk.END, values=(dir_path, status))
+            self.save_directories_to_config()
+    
+    def remove_selected_directory(self):
+        """删除选中的目录"""
+        selected = self.dirs_tree.selection()
+        if not selected:
+            messagebox.showwarning("提示", "请先选择要删除的目录")
+            return
+        
+        for item in selected:
+            self.dirs_tree.delete(item)
+        self.save_directories_to_config()
+    
+    def refresh_directory_status(self):
+        """刷新所有目录的状态"""
+        for child in self.dirs_tree.get_children():
+            dir_path = self.dirs_tree.item(child)['values'][0]
+            status = "✓ 可访问" if os.path.exists(dir_path) else "✗ 不存在"
+            self.dirs_tree.item(child, values=(dir_path, status))
+    
+    def save_directories_to_config(self):
+        """保存目录列表到配置文件"""
+        directories = []
+        for child in self.dirs_tree.get_children():
+            dir_path = self.dirs_tree.item(child)['values'][0]
+            directories.append(dir_path)
+        
+        # 更新config.yaml
+        try:
+            config = self.load_config()
+            config['local_roots'] = directories
+            self.save_config(config)
+        except Exception as e:
+            self.add_log(f"保存目录配置失败: {e}")
+    
+    def load_directories_from_config(self):
+        """从配置文件加载目录列表"""
+        try:
+            config = self.load_config()
+            local_roots = config.get('local_roots', [])
+            
+            # 清空现有列表
+            for child in self.dirs_tree.get_children():
+                self.dirs_tree.delete(child)
+            
+            # 添加目录到列表
+            for directory in local_roots:
+                status = "✓ 可访问" if os.path.exists(directory) else "✗ 不存在"
+                self.dirs_tree.insert('', tk.END, values=(directory, status))
+                
+        except Exception as e:
+            self.add_log(f"加载目录配置失败: {e}")
+
     def load_local_dirs(self):
         """加载本地目录配置"""
         try:
-            # 使用正确的路径
-            config_path = get_config_path("local_dirs.json")
-            if os.path.exists(config_path):
-                with open(config_path, "r", encoding="utf-8") as f:
-                    dirs_config = json.load(f)
-                    # 兼容旧版本格式
-                    if isinstance(dirs_config, list):
-                        # 旧版本，尝试转换为分类格式
-                        porn_dirs = [d for d in dirs_config if "porn" in d.lower() or "western" in d.lower()]
-                        jav_dirs = [d for d in dirs_config if "jav" in d.lower() or "japanese" in d.lower()]
-                        
-                        self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
-                        self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
-                    else:
-                        # 新版本格式 - 使用第一个目录作为显示
-                        porn_dirs = dirs_config.get("porn", [])
-                        jav_dirs = dirs_config.get("jav", [])
-                        
-                        self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
-                        self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
+            # 优先从config.yaml加载
+            config = self.load_config()
+            local_roots = config.get('local_roots', [])
+            
+            # 加载到新的目录管理界面
+            self.load_directories_from_config()
+            
+            # 兼容旧的单目录配置显示
+            if local_roots:
+                # 使用第一个目录作为传统配置显示
+                first_dir = local_roots[0] if local_roots else ""
+                self.porn_dir_var.set(first_dir)
+                self.jav_dir_var.set(first_dir)
             else:
-                # 如果local_dirs.json不存在，从config.yaml加载
-                config = self.load_config()
-                local_roots = config.get('local_roots', {})
-                porn_dirs = local_roots.get('porn', [])
-                jav_dirs = local_roots.get('jav', [])
+                # 设置默认值
+                self.porn_dir_var.set("F:/作品")
+                self.jav_dir_var.set("F:/作品")
                 
-                self.porn_dir_var.set(porn_dirs[0] if porn_dirs else "")
-                self.jav_dir_var.set(jav_dirs[0] if jav_dirs else "")
         except Exception as e:
             # 设置默认值
             self.porn_dir_var.set("F:/作品")
             self.jav_dir_var.set("F:/作品")
+            self.add_log(f"加载本地目录配置失败: {e}")
     
     def show_about(self):
         """显示关于信息"""

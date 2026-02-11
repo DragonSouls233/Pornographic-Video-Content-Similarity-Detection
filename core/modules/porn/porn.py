@@ -716,19 +716,37 @@ def scan_porn_models(config_models: dict, local_roots: List[str], video_exts: Se
     """
     扫描PORN格式的本地模特目录（带[Channel]前缀）
     返回(模特名, 模特根路径, 原始目录名, 国家)元组列表
+    
+    增强功能：
+    - 支持多目录扫描
+    - 添加详细的处理日志
+    - 跨目录去重处理
+    - 性能优化和统计信息
     """
     from ..common.common import clean_filename
     
     matched = []
+    scanned_directories = set()  # 记录已扫描的目录，避免重复
+    model_stats = {}  # 记录每个模特在各目录的视频数量
     
-    for root in local_roots:
+    logger.info(f"PORN - 开始扫描 {len(local_roots)} 个目录...")
+    
+    for root_idx, root in enumerate(local_roots, 1):
         root = os.path.normpath(root)
         
         if not os.path.exists(root):
-            logger.warning(f"⚠ PORN - 路径不存在: {root}")
+            logger.warning(f"⚠ PORN - 路径不存在 [{root_idx}/{len(local_roots)}]: {root}")
             continue
             
-        logger.info(f"PORN - 扫描目录: {root}")
+        if root in scanned_directories:
+            logger.debug(f"  PORN - 跳过已扫描目录: {root}")
+            continue
+            
+        scanned_directories.add(root)
+        logger.info(f"PORN - 扫描目录 [{root_idx}/{len(local_roots)}]: {root}")
+        
+        directory_video_count = 0
+        directory_model_count = 0
         
         try:
             # 递归扫描所有子目录
@@ -780,15 +798,80 @@ def scan_porn_models(config_models: dict, local_roots: List[str], video_exts: Se
                     logger.debug(f"  PORN - 模糊匹配: 使用目录名作为模特名: {matched_model}")
                 
                 if matched_model:
-                    # 提取国家信息：从路径中提取国家目录
-                    relative_path = os.path.relpath(current_dir, root)
-                    path_parts = relative_path.split(os.path.sep)
-                    country = path_parts[0] if len(path_parts) > 0 else "未知国家"
-                    matched.append((matched_model, current_dir, original_dir, country))
-                    logger.info(f"  PORN - 找到本地模特: {matched_model} ({original_dir}) 在 {os.path.join(country, original_dir)}")
+                    # 检查是否已经在结果中（跨目录去重）
+                    existing_match = None
+                    for i, (existing_model, existing_path, existing_original, existing_country) in enumerate(matched):
+                        if existing_model == matched_model:
+                            existing_match = i
+                            break
+                    
+                    if existing_match is not None:
+                        # 合并目录路径信息
+                        existing_model, existing_path, existing_original, existing_country = matched[existing_match]
+                        # 更新为更完整的路径信息
+                        combined_path = f"{existing_path};{current_dir}" if existing_path else current_dir
+                        combined_original = f"{existing_original};{original_dir}"
+                        matched[existing_match] = (matched_model, combined_path, combined_original, existing_country)
+                        logger.debug(f"  PORN - 合并模特目录: {matched_model} -> 多个路径")
+                        
+                        # 更新统计信息
+                        if matched_model not in model_stats:
+                            model_stats[matched_model] = {'directories': [], 'videos': 0}
+                        if current_dir not in model_stats[matched_model]['directories']:
+                            model_stats[matched_model]['directories'].append(current_dir)
+                    else:
+                        # 添加新的匹配项
+                        # 提取国家信息：从路径中提取国家目录
+                        relative_path = os.path.relpath(current_dir, root)
+                        path_parts = relative_path.split(os.path.sep)
+                        country = path_parts[0] if len(path_parts) > 0 else "未知国家"
+                        matched.append((matched_model, current_dir, original_dir, country))
+                        directory_model_count += 1
+                        
+                        # 初始化统计信息
+                        if matched_model not in model_stats:
+                            model_stats[matched_model] = {'directories': [current_dir], 'videos': 0}
+                        else:
+                            model_stats[matched_model]['directories'].append(current_dir)
+                    
+                    # 统计该目录下的视频数量
+                    try:
+                        video_count = 0
+                        for file in os.listdir(current_dir):
+                            name, ext = os.path.splitext(file)
+                            if ext.lower() in video_exts:
+                                video_count += 1
+                        directory_video_count += video_count
+                        if matched_model in model_stats:
+                            model_stats[matched_model]['videos'] += video_count
+                        logger.debug(f"    PORN - 发现 {video_count} 个视频文件")
+                    except Exception as e:
+                        logger.warning(f"    PORN - 无法统计目录视频数量 {current_dir}: {e}")
+                
+            logger.info(f"  PORN - 目录扫描完成: 发现 {directory_model_count} 个模特, {directory_video_count} 个视频")
+            
         except PermissionError:
             logger.error(f"  PORN - 权限不足，无法访问: {root}")
             continue
+        except Exception as e:
+            logger.error(f"  PORN - 扫描目录失败 {root}: {e}")
+            continue
     
-    logger.info(f"PORN - ✅ 共找到 {len(matched)} 个匹配的本地模特目录")
+    # 输出统计信息
+    if model_stats:
+        logger.info(f"PORN - 扫描统计:")
+        logger.info(f"  总计模特数: {len(model_stats)}")
+        total_videos = sum(stats['videos'] for stats in model_stats.values())
+        logger.info(f"  总计视频数: {total_videos}")
+        logger.info(f"  平均每个模特: {total_videos/len(model_stats):.1f} 个视频")
+        
+        # 显示前5个模特的详细信息
+        sorted_models = sorted(model_stats.items(), key=lambda x: x[1]['videos'], reverse=True)
+        logger.info("  前5个模特详情:")
+        for model_name, stats in sorted_models[:5]:
+            dir_count = len(stats['directories'])
+            video_count = stats['videos']
+            logger.info(f"    {model_name}: {dir_count}个目录, {video_count}个视频")
+    
+    logger.info(f"PORN - 多目录扫描完成，共找到 {len(matched)} 个匹配的模特目录")
     return matched
