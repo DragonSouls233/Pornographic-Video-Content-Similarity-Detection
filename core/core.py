@@ -136,6 +136,18 @@ class ModelProcessor:
             ModelResult 处理结果
         """
         model_name, folder, original_dir, country = model_info
+
+        # 国家信息：优先使用数据库中维护的 country（避免默认值不一致/被覆盖）
+        if not country or str(country).strip() in ("未知", "未知国家"):
+            try:
+                from core.modules.common.model_database import ModelDatabase
+                db = ModelDatabase('models.db')
+                info = db.get_model(model_name) or {}
+                db_country = info.get('country')
+                if db_country and str(db_country).strip():
+                    country = str(db_country).strip()
+            except Exception:
+                pass
         
         # 检查是否需要停止
         if self._should_stop():

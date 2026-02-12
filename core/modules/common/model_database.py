@@ -411,7 +411,13 @@ class ModelDatabase:
 
 # 数据库适配器，兼容现有JSON接口
 class DatabaseModelAdapter:
-    """数据库适配器，提供与JSON相同的接口"""
+    """数据库适配器，提供与JSON相同的接口
+
+    重要：GUI/脚本在保存时经常只传 name/url/module。
+    如果直接调用 `ModelDatabase.add_model()` 并使用默认 `country='欧美'`，
+    会把你在数据库里维护好的 country 覆盖掉。
+    这里统一做“保留已有 country/module”的保护。
+    """
     
     def __init__(self, db_path: str = "models.db"):
         self.db = ModelDatabase(db_path)
@@ -425,18 +431,40 @@ class DatabaseModelAdapter:
         except Exception as e:
             self.logger.error(f"加载模特数据失败: {e}")
             return {}
-    
+
     def save_models(self, models_dict: Dict[str, str]):
-        """保存模特数据（兼容JSON接口）"""
+        """保存模特数据（兼容JSON接口）
+
+        注意：此接口只提供 url，因此会尽量保留数据库中已有的 module/country。
+        """
         try:
             for name, url in models_dict.items():
-                self.db.add_model(name, url)
+                # 尝试保留已有字段
+                existing = self.db.get_model(name) or {}
+                module = existing.get('module', 'PORN')
+                country = existing.get('country', '欧美')
+                self.db.add_model(name, url, module, country)
         except Exception as e:
             self.logger.error(f"保存模特数据失败: {e}")
-    
-    def add_model(self, name: str, url: str, module: str = "PORN"):
-        """添加单个模特"""
-        return self.db.add_model(name, url, module)
+
+    def add_model(self, name: str, url: str, module: str = "PORN", country: str = None):
+        """添加/更新单个模特（默认不覆盖已存在的 country）"""
+        try:
+            existing = self.db.get_model(name) or {}
+
+            # module：如果调用方没显式提供，则保留旧值
+            module_to_use = module or existing.get('module', 'PORN')
+
+            # country：如果调用方没显式提供，则保留旧值
+            if country is None:
+                country_to_use = existing.get('country', '欧美')
+            else:
+                country_to_use = country
+
+            return self.db.add_model(name, url, module_to_use, country_to_use)
+        except Exception as e:
+            self.logger.error(f"添加/更新模特失败: {e}")
+            return False
     
     def remove_model(self, name: str) -> bool:
         """删除模特"""

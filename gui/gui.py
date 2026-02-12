@@ -1352,10 +1352,12 @@ class ModelManagerGUI:
                     name = model['name']
                     url = model['url']
                     module = model.get('module', 'PORN')  # 从数据库获取模块信息
+                    country = model.get('country', '欧美')  # 从数据库获取国家信息
                     
                     self.models[name] = {
                         "module": module,
-                        "url": url
+                        "url": url,
+                        "country": country
                     }
                 
                 self.logger.debug(f"从数据库加载了 {len(self.models)} 个模特")
@@ -1422,7 +1424,8 @@ class ModelManagerGUI:
                     if isinstance(info, dict):
                         module = info.get('module', 'PORN')
                         url = info.get('url', '')
-                        db_adapter.add_model(name, url, module)
+                        country = info.get('country', None)
+                        db_adapter.add_model(name, url, module, country)
                 
                 self.logger.debug(f"已保存 {len(self.models)} 个模特到数据库")
                 
