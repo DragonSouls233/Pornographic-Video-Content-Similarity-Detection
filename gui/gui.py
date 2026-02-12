@@ -1123,13 +1123,40 @@ class ModelManagerGUI:
     def load_config(self):
         """加载配置文件"""
         try:
-            if not os.path.exists("config.yaml"):
-                # 如果配置文件不存在，生成默认配置文件
-                with open("config.yaml", "w", encoding="utf-8") as f:
-                    f.write(DEFAULT_CONFIG)
-                messagebox.showinfo("提示", "配置文件不存在，已生成默认配置文件。")
+            # 使用正确的路径处理方式
+            config_path = get_config_path("config.yaml")
             
-            with open("config.yaml", "r", encoding="utf-8") as f:
+            if not os.path.exists(config_path):
+                # 如果配置文件不存在，生成默认配置文件
+                default_config = {
+                    "local_roots": [],
+                    "output_dir": "output",
+                    "log_dir": "log",
+                    "video_extensions": ["mp4", "avi", "mov", "wmv", "flv", "mkv", "rmvb"],
+                    "filename_clean_patterns": [
+                        r"(?i)\[.*?\]",
+                        r"(?i)\(.*?\)",
+                        r"(?i)\{.*?\}"
+                    ],
+                    "scraper": "selenium",
+                    "max_pages": -1,
+                    "delay_between_pages": {
+                        "min": 2.0,
+                        "max": 3.5
+                    },
+                    "retry_on_fail": 2,
+                    "proxy": {
+                        "enabled": False,
+                        "http": "",
+                        "https": ""
+                    }
+                }
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False)
+                messagebox.showinfo("提示", "配置文件不存在，已生成默认配置文件。")
+                return default_config
+            
+            with open(config_path, "r", encoding="utf-8") as f:
                 config_text = f.read()
                 config_text = config_text.replace('\\', '\\\\')
                 config = yaml.safe_load(config_text)
@@ -1137,18 +1164,75 @@ class ModelManagerGUI:
                 # 检查配置文件结构是否完整
                 if not config:
                     # 如果配置文件为空，生成默认配置文件
-                    with open("config.yaml", "w", encoding="utf-8") as f:
-                        f.write(DEFAULT_CONFIG)
+                    default_config = {
+                        "local_roots": [],
+                        "output_dir": "output",
+                        "log_dir": "log",
+                        "video_extensions": ["mp4", "avi", "mov", "wmv", "flv", "mkv", "rmvb"],
+                        "filename_clean_patterns": [
+                            r"(?i)\[.*?\]",
+                            r"(?i)\(.*?\)",
+                            r"(?i)\{.*?\}"
+                        ],
+                        "scraper": "selenium",
+                        "max_pages": -1,
+                        "delay_between_pages": {
+                            "min": 2.0,
+                            "max": 3.5
+                        },
+                        "retry_on_fail": 2,
+                        "proxy": {
+                            "enabled": False,
+                            "http": "",
+                            "https": ""
+                        }
+                    }
+                    with open(config_path, 'w', encoding='utf-8') as f:
+                        yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False)
                     messagebox.showinfo("提示", "配置文件结构不完整，已生成默认配置文件。")
-                    config = yaml.safe_load(DEFAULT_CONFIG)
+                    return default_config
                 
                 return config
         except Exception as e:
             # 如果加载失败，生成默认配置文件
-            with open("config.yaml", "w", encoding="utf-8") as f:
-                f.write(DEFAULT_CONFIG)
+            config_path = get_config_path("config.yaml")
+            default_config = {
+                "local_roots": [],
+                "output_dir": "output",
+                "log_dir": "log",
+                "video_extensions": ["mp4", "avi", "mov", "wmv", "flv", "mkv", "rmvb"],
+                "filename_clean_patterns": [
+                    r"(?i)\[.*?\]",
+                    r"(?i)\(.*?\)",
+                    r"(?i)\{.*?\}"
+                ],
+                "scraper": "selenium",
+                "max_pages": -1,
+                "delay_between_pages": {
+                    "min": 2.0,
+                    "max": 3.5
+                },
+                "retry_on_fail": 2,
+                "proxy": {
+                    "enabled": False,
+                    "http": "",
+                    "https": ""
+                }
+            }
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False)
             messagebox.showinfo("提示", f"配置文件加载失败: {e}\n已生成默认配置文件。")
-            return yaml.safe_load(DEFAULT_CONFIG)
+            return default_config
+    
+    def save_config(self, config):
+        """保存配置文件"""
+        try:
+            config_path = get_config_path("config.yaml")
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+        except Exception as e:
+            self.add_log(f"保存配置文件失败: {e}")
+            raise
     
     def load_models(self):
         """加载模特数据，优先使用数据库"""
@@ -1747,10 +1831,24 @@ class ModelManagerGUI:
                 # 开发环境
                 core_py_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'core', 'core.py')
             
-            # 动态导入core模块
+            # 🚨 修复：确保动态导入时模块命名空间完整
             spec = importlib.util.spec_from_file_location("core.core", core_py_path)
             if spec and spec.loader:
+                # 创建模块并预填充必要的内置模块
                 core_module = importlib.util.module_from_spec(spec)
+                
+                # 确保基本模块在命名空间中可用
+                import os, sys, json, logging
+                core_module.__dict__.update({
+                    'os': os,
+                    'sys': sys,
+                    'json': json,
+                    'logging': logging,
+                    '__file__': core_py_path,
+                    '__name__': 'core.core'
+                })
+                
+                # 执行模块
                 spec.loader.exec_module(core_module)
                 
                 # 替换core模块的日志处理器
@@ -1771,10 +1869,26 @@ class ModelManagerGUI:
                 
                 # 运行脚本
                 try:
+                    # 🚨 修复：添加模块选择参数验证和安全处理
+                    module_selection = self.module_var.get()
+                    scraper_selection = self.scraper_var.get()
+                    
+                    # 验证模块选择参数
+                    valid_modules = ["auto", "porn", "javdb"]
+                    if module_selection not in valid_modules:
+                        raise ValueError(f"无效的模块选择: {module_selection}，有效选项: {valid_modules}")
+                    
+                    # 验证抓取工具参数
+                    valid_scrapers = ["selenium"]
+                    if scraper_selection not in valid_scrapers:
+                        raise ValueError(f"无效的抓取工具: {scraper_selection}，有效选项: {valid_scrapers}")
+                    
                     # 传递一个函数，用于检查运行状态
                     def check_running():
                         return self.running
-                    results = core_module.main(self.module_var.get(), dirs, self.scraper_var.get(), check_running)
+                    
+                    # 安全调用核心模块
+                    results = core_module.main(module_selection, dirs, scraper_selection, check_running)
                     
                     # 发送结果数据到GUI
                     if results:

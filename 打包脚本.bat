@@ -18,7 +18,7 @@ if errorlevel 1 (
     )
 )
 
-echo [重要] 此脚本将在打包完成后自动清理临时测试文件
+echo [重要] 此脚本支持统一配置文件路径和多目录管理模式
 echo.
 
 echo [1/5] 清理旧的打包文件和临时测试文件...
@@ -162,7 +162,7 @@ del /f /q "*测试*.bat" 2>nul
 del /f /q "*验证*.bat" 2>nul
 del /f /q "*check*.bat" 2>nul
 del /f /q "*sync*.bat" 2>nul
-echo      临时测试文件已清理!
+echo      打包优化完成!
 echo.
 
 echo ========================================

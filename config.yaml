@@ -79,7 +79,7 @@ local_roots:
   # - "D:/Videos/PORN"
   # - "E:/收藏/欧美作品" 
   # - "F:/JAV收藏"
-  []
+  - "F:\\作品"
 local_scan:
   category_scan:
     general:

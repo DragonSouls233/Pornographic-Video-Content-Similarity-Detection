@@ -22,7 +22,7 @@ def get_app_path():
         # 打包后的环境
         return os.path.dirname(sys.executable)
     else:
-        # 开发环境
+        # 开发环境 - 返回项目根目录
         return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -85,6 +85,12 @@ def load_config(config_path: str = "config.yaml") -> dict:
         # 使用正确的路径
         if not os.path.isabs(config_path):
             config_path = get_config_path(config_path)
+        
+        # 在开发环境中，优先检查根目录是否存在配置文件
+        if not getattr(sys, 'frozen', False):  # 开发环境
+            root_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), config_path.split('/')[-1])
+            if os.path.exists(root_config_path):
+                config_path = root_config_path
 
         if not os.path.exists(config_path):
             # 自动生成默认配置文件

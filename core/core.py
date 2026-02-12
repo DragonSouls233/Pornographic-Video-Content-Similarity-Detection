@@ -12,9 +12,6 @@ from typing import Set, List, Tuple, Dict, Optional, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
-import sys
-import os
-
 # 添加项目根目录到Python路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
@@ -572,6 +569,26 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
     """
     # 初始化日志器（提前初始化以便错误处理）
     logger = logging.getLogger(__name__)
+    
+    # 🚨 修复：添加参数验证和安全初始化
+    try:
+        # 验证module_arg参数
+        valid_modules = ["auto", "porn", "javdb"]
+        if module_arg not in valid_modules:
+            raise ValueError(f"无效的模块参数: {module_arg}，有效选项: {valid_modules}")
+        
+        # 验证scraper参数
+        valid_scrapers = ["selenium"]
+        if scraper not in valid_scrapers:
+            raise ValueError(f"无效的抓取工具参数: {scraper}，有效选项: {valid_scrapers}")
+        
+        # 确保local_dirs是列表类型
+        if local_dirs is not None and not isinstance(local_dirs, list):
+            raise TypeError(f"local_dirs必须是列表类型，当前类型: {type(local_dirs)}")
+    
+    except Exception as param_error:
+        logger.error(f"参数验证失败: {param_error}")
+        raise
     
     try:
         # 模块选择
