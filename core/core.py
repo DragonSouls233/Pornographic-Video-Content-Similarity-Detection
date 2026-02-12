@@ -366,22 +366,25 @@ class ModelProcessor:
                             f.write("✅ 本地视频完整，无缺失\n")
                             f.write("\n" + "=" * 60 + "\n")
                     
-                    # 如果有缺失视频，生成缺失视频链接文件
+                    # 如果有缺失视频，生成缺失视频链接文件（缺失目录：只保留URL）
                     if missing and missing_with_urls:
                         missing_links_file = os.path.join(missing_dir, f"{model_name}_缺失链接_{datetime.now().strftime('%Y%m%d')}.txt")
                         with open(missing_links_file, 'w', encoding='utf-8') as f:
-                            f.write(f"# {model_name} 缺失视频链接\n")
-                            f.write(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                            f.write(f"# 总数量: {len(missing_with_urls)}\n")
-                            f.write("# " + "=" * 58 + "\n\n")
-                            
-                            for i, (title, video_url) in enumerate(missing_with_urls, 1):
-                                f.write(f"{title}\n")
-                                if video_url:
-                                    f.write(f"{video_url}\n")
-                                f.write("\n")
-                        
-                        self.logger.info(f"[线程-{thread_id}] {model_name}: 📁 缺失链接已保存")
+                            # 按你的要求：缺失目录里的TXT仅输出URL（一行一个），不写标题/统计/注释
+                            urls = []
+                            for _, video_url in missing_with_urls:
+                                if video_url and str(video_url).strip():
+                                    urls.append(str(video_url).strip())
+
+                            # 去重但保持顺序
+                            seen = set()
+                            for u in urls:
+                                if u in seen:
+                                    continue
+                                seen.add(u)
+                                f.write(u + "\n")
+
+                        self.logger.info(f"[线程-{thread_id}] {model_name}: 📁 缺失链接已保存（URL-only）")
                         
                         # 更新智能缓存中的缺失视频列表（用于后续只更新）
                         if self.smart_cache and self.smart_cache.enabled:
