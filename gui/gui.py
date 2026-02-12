@@ -1811,9 +1811,9 @@ class ModelManagerGUI:
             
             # 导入核心模块（使用动态导入方式）
             import sys
-            import os
             import importlib.util
             import logging
+
             
             # 配置日志捕获
             # 🚨 修复：使用预先定义的QueueHandler类，添加安全检查
@@ -1838,8 +1838,8 @@ class ModelManagerGUI:
                 core_module = importlib.util.module_from_spec(spec)
                 
                 # 确保基本模块在命名空间中可用
-                import os, sys, json, logging
                 core_module.__dict__.update({
+
                     'os': os,
                     'sys': sys,
                     'json': json,
