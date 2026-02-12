@@ -95,6 +95,14 @@ pyinstaller --clean ^
     --hidden-import colorama ^
     --hidden-import python_dateutil ^
     --hidden-import charset_normalizer ^
+    --hidden-import pandas ^
+    --hidden-import openpyxl ^
+    --hidden-import xlrd ^
+    --hidden-import psutil ^
+    --hidden-import concurrent.futures ^
+    --hidden-import gui.batch_model_processor ^
+    --hidden-import gui.data_validator ^
+    --hidden-import gui.performance_optimizer ^
     --hidden-import core.modules ^
     --hidden-import core.modules.common ^
     --hidden-import core.modules.common.async_downloader ^
@@ -152,6 +160,12 @@ if not exist "dist\requirements.txt" (
     if exist "requirements.txt" (
         copy "requirements.txt" "dist\requirements.txt" >nul
         echo      - requirements.txt 已复制
+    )
+)
+if not exist "dist\BATCH_MODEL_MANAGEMENT.md" (
+    if exist "BATCH_MODEL_MANAGEMENT.md" (
+        copy "BATCH_MODEL_MANAGEMENT.md" "dist\BATCH_MODEL_MANAGEMENT.md" >nul
+        echo      - BATCH_MODEL_MANAGEMENT.md 已复制
     )
 )
 echo      完成!

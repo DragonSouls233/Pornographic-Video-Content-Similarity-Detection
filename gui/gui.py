@@ -235,6 +235,14 @@ class ModelManagerGUI:
         # 分隔线
         ttk.Separator(action_frame, orient='horizontal').pack(fill=tk.X, pady=10)
         
+        # 批量操作
+        ttk.Label(action_frame, text="批量操作", font=("Arial", 10, "bold")).pack(pady=5)
+        ttk.Button(action_frame, text="批量导入模特", command=self.batch_import_models, width=20).pack(fill=tk.X, pady=2)
+        ttk.Button(action_frame, text="批量导出模特", command=self.batch_export_models, width=20).pack(fill=tk.X, pady=2)
+        
+        # 分隔线
+        ttk.Separator(action_frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        
         # 刷新列表
         ttk.Button(action_frame, text="刷新列表", command=self.refresh_models, width=20).pack(fill=tk.X, pady=5)
         
@@ -1713,14 +1721,33 @@ class ModelManagerGUI:
         
         # 确认删除
         if messagebox.askyesno("确认", f"确定要删除模特 '{model_name}' 吗？"):
-            # 从模型字典中删除
-            if model_name in self.models:
-                del self.models[model_name]
+            try:
+                # 从数据库删除（优先）
+                try:
+                    from core.modules.common.model_database import ModelDatabase
+                    db = ModelDatabase('models.db')
+                    success = db.delete_model(model_name)
+                    if not success:
+                        self.logger.warning(f"数据库中未找到模特: {model_name}")
+                except Exception as db_error:
+                    self.logger.warning(f"数据库删除失败，仅从内存删除: {db_error}")
                 
-                # 保存并更新列表
-                if self.save_models():
-                    self.update_model_list()
-                    messagebox.showinfo("成功", "模特删除成功")
+                # 从模型字典中删除
+                if model_name in self.models:
+                    del self.models[model_name]
+                    
+                    # 保存并更新列表
+                    if self.save_models():
+                        self.update_model_list()
+                        messagebox.showinfo("成功", f"模特 '{model_name}' 删除成功")
+                    else:
+                        messagebox.showerror("错误", "保存数据失败")
+                else:
+                    messagebox.showwarning("提示", f"模特 '{model_name}' 不存在于内存中")
+                    
+            except Exception as e:
+                self.logger.error(f"删除模特失败: {e}")
+                messagebox.showerror("错误", f"删除失败: {e}")
     
     def refresh_models(self):
         """刷新模特列表"""
@@ -1768,6 +1795,52 @@ class ModelManagerGUI:
                         messagebox.showinfo("成功", f"已导入 {len(imported_models)} 个模特")
             except Exception as e:
                 messagebox.showerror("错误", f"导入失败: {e}")
+    
+    def batch_import_models(self):
+        """批量导入模特数据"""
+        try:
+            from gui.batch_model_processor import BatchImportDialog
+            
+            # 显示导入对话框
+            dialog = BatchImportDialog(self.root, self.models, self.logger)
+            result = dialog.show_dialog()
+            
+            if result and result.get('success'):
+                # 保存导入的数据
+                if self.save_models():
+                    self.update_model_list()
+                    imported_count = result.get('imported_count', 0)
+                    messagebox.showinfo("成功", f"批量导入完成！成功导入 {imported_count} 个模特")
+                else:
+                    messagebox.showerror("错误", "保存导入数据失败")
+            
+        except ImportError:
+            # 如果批量处理模块不可用，回退到传统导入
+            self.import_models()
+        except Exception as e:
+            self.logger.error(f"批量导入失败: {e}")
+            messagebox.showerror("错误", f"批量导入失败: {e}")
+    
+    def batch_export_models(self):
+        """批量导出模特数据"""
+        try:
+            from gui.batch_model_processor import BatchExportDialog
+            
+            # 显示导出对话框
+            dialog = BatchExportDialog(self.root, self.models, self.logger)
+            result = dialog.show_dialog()
+            
+            if result and result.get('success'):
+                export_path = result.get('path', '')
+                export_count = result.get('count', 0)
+                self.logger.info(f"已导出 {export_count} 个模特到: {export_path}")
+            
+        except ImportError:
+            # 如果批量处理模块不可用，回退到传统导出
+            self.export_models()
+        except Exception as e:
+            self.logger.error(f"批量导出失败: {e}")
+            messagebox.showerror("错误", f"批量导出失败: {e}")
     
     def start_run(self):
         """开始运行查重脚本"""
