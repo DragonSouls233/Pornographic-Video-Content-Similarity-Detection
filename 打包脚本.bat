@@ -40,7 +40,7 @@ echo [3/5] 开始打包...
 REM 打包命令 - 支持V1/V3统一下载器
 pyinstaller --clean ^
     --onefile ^
-    --noconsole ^
+    --console ^
     --name "模特查重管理系统" ^
     --noupx ^
     --add-data "core;core" ^
@@ -103,6 +103,7 @@ pyinstaller --clean ^
     --hidden-import gui.batch_model_processor ^
     --hidden-import gui.data_validator ^
     --hidden-import gui.performance_optimizer ^
+    --hidden-import gui.delete_optimizer ^
     --hidden-import core.modules ^
     --hidden-import core.modules.common ^
     --hidden-import core.modules.common.async_downloader ^

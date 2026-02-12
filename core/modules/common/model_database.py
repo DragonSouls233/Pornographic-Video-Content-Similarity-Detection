@@ -6,6 +6,7 @@
 import sqlite3
 import json
 import os
+import sys
 import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
@@ -16,7 +17,15 @@ class ModelDatabase:
     """模特数据库管理器"""
     
     def __init__(self, db_path: str = "models.db"):
-        self.db_path = db_path
+        # 确保路径在EXE环境中正确工作
+        if getattr(sys, 'frozen', False):
+            # 打包为EXE时，使用可执行文件所在目录
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # 开发环境时，使用传入路径或当前工作目录
+            base_path = os.getcwd()
+            
+        self.db_path = os.path.join(base_path, db_path)
         self.logger = logging.getLogger(__name__)
         self.init_database()
     

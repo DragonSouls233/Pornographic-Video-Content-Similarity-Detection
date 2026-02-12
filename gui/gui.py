@@ -1708,7 +1708,7 @@ class ModelManagerGUI:
         self.root.wait_window(dialog)
     
     def delete_model(self):
-        """删除模特"""
+        """删除模特（优化版本）"""
         # 获取选中的项
         selected_items = self.model_tree.selection()
         if not selected_items:
@@ -1717,37 +1717,200 @@ class ModelManagerGUI:
         
         # 获取选中项的数据
         item = selected_items[0]
-        model_name, _ = self.model_tree.item(item, "values")
+        values = self.model_tree.item(item, "values")
+        model_name = values[0]  # 修正：正确解包三列数据
         
-        # 确认删除
-        if messagebox.askyesno("确认", f"确定要删除模特 '{model_name}' 吗？"):
+        # 显示详细确认对话框
+        confirm_result = self._show_delete_confirmation(model_name)
+        if not confirm_result:
+            return
+        
+        try:
+            self.logger.info(f"开始删除模特: {model_name}")
+            
+            # 使用删除优化器
             try:
-                # 从数据库删除（优先）
-                try:
-                    from core.modules.common.model_database import ModelDatabase
-                    db = ModelDatabase('models.db')
-                    success = db.delete_model(model_name)
-                    if not success:
-                        self.logger.warning(f"数据库中未找到模特: {model_name}")
-                except Exception as db_error:
-                    self.logger.warning(f"数据库删除失败，仅从内存删除: {db_error}")
+                from gui.delete_optimizer import get_delete_optimizer
+                # 使用应用基础路径确保EXE环境下路径正确
+                base_path = get_app_path()
+                optimizer = get_delete_optimizer(
+                    db_path=os.path.join(base_path, 'models.db'),
+                    json_path=os.path.join(base_path, 'models.json'), 
+                    logger=self.logger
+                )
                 
-                # 从模型字典中删除
-                if model_name in self.models:
-                    del self.models[model_name]
-                    
-                    # 保存并更新列表
+                # 执行优化删除
+                result = optimizer.optimize_delete_operation(model_name, self.models)
+                
+                if result.success:
+                    # 保存更改并更新界面
                     if self.save_models():
                         self.update_model_list()
-                        messagebox.showinfo("成功", f"模特 '{model_name}' 删除成功")
+                        
+                        # 显示成功信息
+                        self._show_delete_success(model_name, result)
                     else:
                         messagebox.showerror("错误", "保存数据失败")
                 else:
-                    messagebox.showwarning("提示", f"模特 '{model_name}' 不存在于内存中")
+                    # 显示详细错误信息
+                    self._show_delete_error(model_name, result)
                     
-            except Exception as e:
-                self.logger.error(f"删除模特失败: {e}")
-                messagebox.showerror("错误", f"删除失败: {e}")
+            except ImportError:
+                # 回退到传统删除方式
+                self.logger.warning("删除优化器不可用，使用传统删除方式")
+                self._legacy_delete_model(model_name)
+                
+        except Exception as e:
+            self.logger.error(f"删除模特失败: {e}")
+            import traceback
+            error_details = traceback.format_exc()
+            self.logger.error(f"删除异常堆栈: {error_details}")
+            
+            # 在打包EXE中显示详细错误
+            error_msg = f"删除失败: {e}"
+            if getattr(sys, 'frozen', False):
+                # 打包环境，显示更详细的错误信息
+                error_msg += f"\n\n详细信息:\n{error_details}"
+            
+            messagebox.showerror("错误", error_msg)
+    
+    def _show_delete_confirmation(self, model_name: str) -> bool:
+        """显示删除确认对话框"""
+        try:
+            from gui.delete_optimizer import get_delete_optimizer
+            optimizer = get_delete_optimizer(logger=self.logger)
+            
+            # 检查模特的存在情况
+            existence = optimizer.verify_model_existence(model_name)
+            
+            # 构建确认信息
+            confirm_text = f"确定要删除模特 '{model_name}' 吗？\n\n"
+            
+            if existence['in_database']:
+                confirm_text += f"• 数据库中存在该模特\n"
+                if existence['video_count'] > 0:
+                    confirm_text += f"• 关联 {existence['video_count']} 条视频记录\n"
+                confirm_text += "• 删除将自动清理所有相关数据\n"
+            else:
+                confirm_text += "• 数据库中不存在该模特\n"
+            
+            if existence['in_memory']:
+                confirm_text += "• 内存中存在该模特\n"
+            
+            confirm_text += "\n此操作不可撤销，确认继续吗？"
+            
+            return messagebox.askyesno("确认删除", confirm_text)
+            
+        except Exception as e:
+            self.logger.warning(f"显示详细确认失败: {e}")
+            # 回退到简单确认
+            return messagebox.askyesno("确认", f"确定要删除模特 '{model_name}' 吗？")
+    
+    def _show_delete_success(self, model_name: str, result):
+        """显示删除成功信息"""
+        try:
+            from gui.delete_optimizer import get_delete_optimizer
+            optimizer = get_delete_optimizer(logger=self.logger)
+            
+            # 生成删除报告
+            report = optimizer.generate_delete_report(model_name, result)
+            
+            # 显示成功信息
+            message = f"模特 '{model_name}' 删除成功！\n\n"
+            message += f"影响记录数: {result.affected_records} 条\n"
+            message += f"执行时间: {result.execution_time:.2f} 秒\n\n"
+            
+            # 显示详细信息按钮
+            result = messagebox.askyesno(
+                "删除成功", 
+                message,
+                detail=report,
+                icon="info"
+            )
+            
+            # 如果用户选择查看详细信息
+            if result:
+                self._show_delete_detail_report(report)
+                
+        except Exception as e:
+            self.logger.warning(f"显示删除成功详情失败: {e}")
+            messagebox.showinfo("成功", f"模特 '{model_name}' 删除成功！")
+    
+    def _show_delete_error(self, model_name: str, result):
+        """显示删除错误信息"""
+        error_message = f"删除模特 '{model_name}' 失败！\n\n"
+        error_message += f"错误信息: {result.error_message}\n\n"
+        error_message += "请检查:\n"
+        error_message += "1. 数据库文件是否可写\n"
+        error_message += "2. 是否有其他程序正在使用数据库\n"
+        error_message += "3. 磁盘空间是否充足\n"
+        
+        messagebox.showerror("删除失败", error_message)
+    
+    def _show_delete_detail_report(self, report: str):
+        """显示详细删除报告"""
+        try:
+            # 创建报告窗口
+            detail_window = tk.Toplevel(self.root)
+            detail_window.title("删除操作详细报告")
+            detail_window.geometry("600x400")
+            
+            # 创建文本框和滚动条
+            text_frame = ttk.Frame(detail_window)
+            text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            text_widget = tk.Text(text_frame, wrap=tk.WORD, font=("Courier", 10))
+            scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # 插入报告内容
+            text_widget.insert(tk.END, report)
+            text_widget.config(state=tk.DISABLED)
+            
+            # 添加关闭按钮
+            close_button = ttk.Button(detail_window, text="关闭", command=detail_window.destroy)
+            close_button.pack(pady=10)
+            
+            # 居中窗口
+            detail_window.transient(self.root)
+            detail_window.grab_set()
+            detail_window.wait_window()
+            
+        except Exception as e:
+            self.logger.error(f"显示详细报告失败: {e}")
+    
+    def _legacy_delete_model(self, model_name: str):
+        """传统删除方式（回退方案）"""
+        try:
+            # 从数据库删除（优先）
+            try:
+                from core.modules.common.model_database import ModelDatabase
+                db = ModelDatabase('models.db')
+                success = db.delete_model(model_name)
+                if not success:
+                    self.logger.warning(f"数据库中未找到模特: {model_name}")
+            except Exception as db_error:
+                self.logger.warning(f"数据库删除失败，仅从内存删除: {db_error}")
+            
+            # 从模型字典中删除
+            if model_name in self.models:
+                del self.models[model_name]
+                
+                # 保存并更新列表
+                if self.save_models():
+                    self.update_model_list()
+                    messagebox.showinfo("成功", f"模特 '{model_name}' 删除成功")
+                else:
+                    messagebox.showerror("错误", "保存数据失败")
+            else:
+                messagebox.showwarning("提示", f"模特 '{model_name}' 不存在于内存中")
+                    
+        except Exception as e:
+            self.logger.error(f"传统删除失败: {e}")
+            messagebox.showerror("错误", f"删除失败: {e}")
     
     def refresh_models(self):
         """刷新模特列表"""
