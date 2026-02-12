@@ -174,11 +174,13 @@ class ModelProcessor:
             url = models.get(model_name)
             if not url:
                 self.logger.error(f"[线程-{thread_id}] {model_name}: 配置中未找到URL")
+                self.logger.warning(f"[线程-{thread_id}] 提示: 请在models.json或数据库中添加模特 '{model_name}' 的配置")
+                self.logger.warning(f"[线程-{thread_id}] 当前已配置的模特: {list(models.keys())}")
                 self._update_stats(False)
                 return ModelResult(
                     model_name=model_name,
                     success=False,
-                    error_message="未找到URL",
+                    error_message=f"未找到URL，请添加模特配置",
                     local_count=len(local_set),
                     country=country,
                     local_folder=original_dir,

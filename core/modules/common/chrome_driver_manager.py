@@ -232,11 +232,12 @@ class ChromeVersionDetector:
 class ChromeDriverManager:
     """ChromeDriver管理器"""
     
-    # ChromeDriver下载镜像源
+    # ChromeDriver下载镜像源 - 添加更多可靠的镜像源
     DRIVER_MIRRORS = [
         "https://chromedriver.storage.googleapis.com",  # 官方源
-        "https://npmmirror.com/mirrors/chromedriver",   # 阿里云镜像
-        "https://cdn.npmmirror.com/binaries/chromedriver"  # npmmirror镜像
+        "https://registry.npmmirror.com/-/binary/chromedriver",   # 阿里云镜像
+        "https://cdn.npmmirror.com/binaries/chromedriver",  # npmmirror镜像
+        "https://chromedriver.storage.googleapis.com"  # 备用官方源
     ]
     
     def __init__(self, driver_dir: str = "drivers"):
@@ -356,27 +357,49 @@ class ChromeDriverManager:
         """获取指定主版本的最新ChromeDriver版本"""
         version_url = f"https://chromedriver.storage.googleapis.com/LATEST_RELEASE_{major_version}"
         
-        try:
-            with urllib.request.urlopen(version_url, timeout=10) as response:
-                version = response.read().decode().strip()
-                logger.info(f"找到ChromeDriver版本: {version}")
-                return version
-        except Exception as e:
-            logger.debug(f"获取版本信息失败: {e}")
-            # 尝试获取最新版本
-            return self._get_latest_stable_version()
+        # 尝试多个镜像源
+        mirror_urls = [
+            f"https://chromedriver.storage.googleapis.com/LATEST_RELEASE_{major_version}",
+            f"https://registry.npmmirror.com/-/binary/chromedriver/LATEST_RELEASE_{major_version}",
+            "https://chromedriver.storage.googleapis.com/LATEST_RELEASE"  # fallback to latest
+        ]
+        
+        for url in mirror_urls:
+            try:
+                logger.debug(f"尝试获取版本信息: {url}")
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    version = response.read().decode().strip()
+                    logger.info(f"找到ChromeDriver版本: {version}")
+                    return version
+            except Exception as e:
+                logger.debug(f"从 {url} 获取版本信息失败: {e}")
+                continue
+        
+        # 如果所有镜像都失败，尝试获取最新稳定版本
+        logger.warning("所有镜像源都失败，尝试获取最新稳定版本")
+        return self._get_latest_stable_version()
     
     def _get_latest_stable_version(self) -> Optional[str]:
         """获取最新的稳定版本"""
-        try:
-            version_url = "https://chromedriver.storage.googleapis.com/LATEST_RELEASE"
-            with urllib.request.urlopen(version_url, timeout=10) as response:
-                version = response.read().decode().strip()
-                logger.info(f"使用最新稳定版本: {version}")
-                return version
-        except Exception as e:
-            logger.error(f"无法获取ChromeDriver版本: {e}")
-            return None
+        # 尝试多个镜像源
+        mirror_urls = [
+            "https://chromedriver.storage.googleapis.com/LATEST_RELEASE",
+            "https://registry.npmmirror.com/-/binary/chromedriver/LATEST_RELEASE"
+        ]
+        
+        for url in mirror_urls:
+            try:
+                logger.debug(f"尝试获取最新稳定版本: {url}")
+                with urllib.request.urlopen(url, timeout=15) as response:
+                    version = response.read().decode().strip()
+                    logger.info(f"使用最新稳定版本: {version}")
+                    return version
+            except Exception as e:
+                logger.debug(f"从 {url} 获取最新版本失败: {e}")
+                continue
+        
+        logger.error("无法获取ChromeDriver版本: 所有镜像源都不可访问")
+        return None
     
     def _get_platform_suffix(self) -> Optional[str]:
         """获取平台对应的文件后缀"""
@@ -402,10 +425,36 @@ class ChromeDriverManager:
     def _test_url_accessible(self, url: str) -> bool:
         """测试URL是否可访问"""
         try:
+            # 尝试使用系统代理设置
+            import os
+            proxy_handler = None
+            
+            # 检查环境变量中的代理设置
+            http_proxy = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
+            https_proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+            
+            if http_proxy or https_proxy:
+                proxy_dict = {}
+                if http_proxy:
+                    proxy_dict['http'] = http_proxy
+                if https_proxy:
+                    proxy_dict['https'] = https_proxy
+                
+                # 创建代理处理器
+                proxy_handler = urllib.request.ProxyHandler(proxy_dict)
+                opener = urllib.request.build_opener(proxy_handler)
+                urllib.request.install_opener(opener)
+                logger.debug(f"使用代理测试URL: {url}")
+            
             request = urllib.request.Request(url, method='HEAD')
-            with urllib.request.urlopen(request, timeout=5) as response:
-                return response.status == 200
-        except Exception:
+            # 增加超时时间到15秒
+            with urllib.request.urlopen(request, timeout=15) as response:
+                result = response.status == 200
+                if result:
+                    logger.debug(f"URL可访问: {url}")
+                return result
+        except Exception as e:
+            logger.debug(f"URL不可访问 {url}: {e}")
             return False
     
     def _extract_zip(self, zip_path: Path, extract_to: Path):
