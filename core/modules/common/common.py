@@ -17,13 +17,16 @@ def get_app_path():
     """
     获取应用程序路径
     打包后返回可执行文件所在目录，开发环境返回项目根目录
+
+    注意：`common.py` 位于 `core/modules/common/`，需要回溯到项目根目录，
+    否则会错误读取 `core/config.yaml` 并生成简化默认配置。
     """
     if getattr(sys, 'frozen', False):
         # 打包后的环境
         return os.path.dirname(sys.executable)
     else:
-        # 开发环境 - 返回项目根目录
-        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # 开发环境 - 返回项目根目录（core/modules/common -> project_root）
+        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 def get_config_path(filename):

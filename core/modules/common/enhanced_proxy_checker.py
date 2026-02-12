@@ -315,31 +315,50 @@ class EnhancedProxyTester:
         return results
     
     def _extract_proxy_info(self) -> Tuple[str, int, str]:
-        """提取代理配置信息"""
-        # 优先使用network.proxy配置
-        proxy_section = self.proxy_config.get('network', {}).get('proxy', {})
-        if not proxy_section:
-            proxy_section = self.proxy_config.get('proxy', {})
-        
+        """提取代理配置信息（兼容传入整份config或仅proxy段）"""
+
+        # 兼容两种入参：
+        # 1) 传入整份config：{'network': {'proxy': {...}}} 或 {'proxy': {...}}
+        # 2) 直接传入proxy段：{'enabled': True, 'host': '127.0.0.1', 'port': '10808', ...}
+        def _get_proxy_section(cfg: dict) -> dict:
+            if not isinstance(cfg, dict):
+                return {}
+
+            # 如果本身就像proxy段（含host/port/http/https/type任一），直接使用
+            if any(k in cfg for k in ('host', 'port', 'http', 'https', 'type')):
+                return cfg
+
+            # 否则尝试从整份config里取
+            proxy_section = cfg.get('network', {}).get('proxy', {})
+            if proxy_section:
+                return proxy_section
+            proxy_section = cfg.get('proxy', {})
+            if proxy_section:
+                return proxy_section
+
+            return {}
+
+        proxy_section = _get_proxy_section(self.proxy_config)
+
         host = proxy_section.get('host', '')
         port = proxy_section.get('port', '')
-        proxy_type = proxy_section.get('type', 'http')
-        
+        proxy_type = proxy_section.get('type', '') or 'http'
+
         # 从URL中解析（如果host/port为空）
         if not host or not port:
-            http_proxy = proxy_section.get('http', '')
+            http_proxy = proxy_section.get('http', '') or proxy_section.get('https', '')
             if http_proxy:
                 parsed = urllib.parse.urlparse(http_proxy)
                 host = parsed.hostname or host
                 port = parsed.port or port
-                if not proxy_type and parsed.scheme:
+                if parsed.scheme:
                     proxy_type = parsed.scheme
-        
+
         try:
             port = int(port) if port else 0
         except (ValueError, TypeError):
             port = 0
-        
+
         return host, port, proxy_type
     
     def _build_proxy_dict(self) -> Optional[Dict[str, str]]:
@@ -399,65 +418,77 @@ class EnhancedProxyTester:
 
 
 def print_comprehensive_report(check_result: ComprehensiveProxyCheck):
-    """打印综合检查报告"""
-    print("\n" + "="*80)
-    print("🔍 代理连接综合检查报告")
-    print("="*80)
-    
+    """打印综合检查报告（Windows控制台不支持emoji时自动降级输出）"""
+    import sys
+
+    def safe_print(text: str = "", end: str = "\n"):
+        try:
+            print(text, end=end)
+        except UnicodeEncodeError:
+            enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+            # 用replace避免崩溃（emoji会被替换成?）
+            safe_text = str(text).encode(enc, errors='replace').decode(enc, errors='replace')
+            print(safe_text, end=end)
+
+    safe_print("\n" + "=" * 80)
+    safe_print("🔍 代理连接综合检查报告")
+    safe_print("=" * 80)
+
     # 总体状态
     status_icon = "✅" if check_result.overall_success else "❌"
-    print(f"\n总体状态: {status_icon} {'通过' if check_result.overall_success else '失败'}")
-    
+    safe_print(f"\n总体状态: {status_icon} {'通过' if check_result.overall_success else '失败'}")
+
     # 基础连接
     basic = check_result.basic_connectivity
     icon = "✅" if basic.success else "❌"
-    print(f"\n🔌 基础TCP连接: {icon}")
-    print(f"  地址: {basic.host}:{basic.port} ({basic.proxy_type})")
+    safe_print(f"\n🔌 基础TCP连接: {icon}")
+    safe_print(f"  地址: {basic.host}:{basic.port} ({basic.proxy_type})")
     if basic.success:
-        print(f"  响应时间: {basic.response_time:.2f}秒")
+        safe_print(f"  响应时间: {basic.response_time:.2f}秒")
     else:
-        print(f"  错误: {basic.error_message}")
-    
+        safe_print(f"  错误: {basic.error_message}")
+
     # HTTP访问
     http = check_result.http_access
     icon = "✅" if http.success else "❌"
-    print(f"\n🌐 HTTP访问: {icon}")
+    safe_print(f"\n🌐 HTTP访问: {icon}")
     if http.success:
-        print(f"  响应时间: {http.response_time:.2f}秒")
+        safe_print(f"  响应时间: {http.response_time:.2f}秒")
         ip = http.details.get('ip', 'unknown')
-        print(f"  出口IP: {ip}")
+        safe_print(f"  出口IP: {ip}")
     else:
-        print(f"  错误: {http.error_message}")
-    
+        safe_print(f"  错误: {http.error_message}")
+
     # HTTPS访问
     https = check_result.https_access
     icon = "✅" if https.success else "❌"
-    print(f"\n🔒 HTTPS访问: {icon}")
+    safe_print(f"\n🔒 HTTPS访问: {icon}")
     if https.success:
-        print(f"  响应时间: {https.response_time:.2f}秒")
+        safe_print(f"  响应时间: {https.response_time:.2f}秒")
         ip = https.details.get('ip', 'unknown')
-        print(f"  出口IP: {ip}")
+        safe_print(f"  出口IP: {ip}")
     else:
-        print(f"  错误: {https.error_message}")
-    
+        safe_print(f"  错误: {https.error_message}")
+
     # 目标网站
-    print(f"\n🎯 目标网站测试:")
+    safe_print(f"\n🎯 目标网站测试:")
     for result in check_result.target_websites:
         icon = "✅" if result.success else "❌"
         status = "成功" if result.success else "失败"
-        print(f"  {icon} {result.host}: {status}", end="")
+        safe_print(f"  {icon} {result.host}: {status}", end="")
         if result.success:
-            print(f" ({result.response_time:.2f}s)")
+            safe_print(f" ({result.response_time:.2f}s)")
         else:
-            print(f" - {result.error_message}")
-    
+            safe_print(f" - {result.error_message}")
+
     # 建议
     if check_result.recommendations:
-        print(f"\n💡 改进建议:")
+        safe_print(f"\n💡 改进建议:")
         for recommendation in check_result.recommendations:
-            print(f"  {recommendation}")
-    
-    print("\n" + "="*80)
+            safe_print(f"  {recommendation}")
+
+    safe_print("\n" + "=" * 80)
+
 
 
 # 便捷函数

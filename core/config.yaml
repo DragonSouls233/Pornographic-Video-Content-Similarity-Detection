@@ -1,0 +1,26 @@
+delay_between_pages:
+  max: 3.5
+  min: 2.0
+filename_clean_patterns:
+- (?i)\[.*?\]
+- (?i)\(.*?\)
+- (?i)\{.*?\}
+local_roots:
+- F:\作品
+log_dir: log
+max_pages: -1
+output_dir: output
+proxy:
+  enabled: false
+  http: ''
+  https: ''
+retry_on_fail: 2
+scraper: selenium
+video_extensions:
+- mp4
+- avi
+- mov
+- wmv
+- flv
+- mkv
+- rmvb

@@ -799,22 +799,19 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
                 logger.error("  5. 尝试禁用代理使用直连")
                 logger.error("=" * 60)
                 
-                # 询问用户是否继续（仅在有控制台的情况下）
-                try:
-                    # 检查是否有可用的stdin
-                    if sys.stdin and sys.stdin.isatty():
+                # 代理检查失败：默认自动继续（避免反复卡住），仅记录告警
+                ask_on_fail = config.get('network', {}).get('proxy', {}).get('ask_on_fail', False)
+                if ask_on_fail and sys.stdin and sys.stdin.isatty():
+                    try:
                         user_input = input("\n是否继续运行程序？(y/N): ").strip().lower()
                         if user_input not in ['y', 'yes']:
                             logger.info("用户选择退出程序")
                             sys.exit(1)
-                    else:
-                        # 无控制台环境，默认继续运行
-                        logger.info("\n⚠️  无控制台环境，程序将自动继续运行")
-                        logger.info("提示：如需交互，请在命令行中运行程序")
-                except (RuntimeError, EOFError):
-                    # 打包环境下的异常处理
-                    logger.info("\n⚠️  无法获取用户输入，程序将自动继续运行")
-                    logger.info("提示：代理检查失败，程序仍会继续执行，但可能出现网络问题")
+                    except (RuntimeError, EOFError):
+                        logger.info("\n⚠️  无法获取用户输入，程序将自动继续运行")
+                else:
+                    logger.info("\n⚠️  代理检查未通过，程序将自动继续运行（如需询问请在config开启 network.proxy.ask_on_fail: true）")
+                    logger.info("提示：代理检查失败时仍可继续，但可能出现网络/证书问题")
             else:
                 logger.info("✅ 代理连接检查通过，继续执行...\n")
         else:
