@@ -1802,12 +1802,19 @@ class ModelManagerGUI:
             # 从多目录配置中获取本地目录
             config = self.load_config()
             local_roots = config.get('local_roots', [])
-            dirs = [d for d in local_roots if d and os.path.exists(d)]  # 筛选有效且存在的目录
+            dirs, dir_errors = self._validate_local_dirs(local_roots)
             
             if not dirs:
-                self.log_text.delete(1.0, tk.END)
-                self.log_text.insert(tk.END, "错误: 没有配置有效的本地目录\n请先在目录管理中添加本地视频目录")
+                self.queue.put(("status", "目录校验失败"))
+                self.queue.put(("log", "错误: 没有配置有效的本地目录"))
+                self.queue.put(("log", "请先在目录管理中添加本地视频目录"))
+                if dir_errors:
+                    self.queue.put(("log", "目录校验结果:"))
+                    for err in dir_errors:
+                        self.queue.put(("log", f" - {err}"))
+                self.queue.put(("error", "目录校验失败，请检查目录配置与权限"))
                 return
+
             
             # 导入核心模块（使用动态导入方式）
             import sys
@@ -1839,7 +1846,6 @@ class ModelManagerGUI:
                 
                 # 确保基本模块在命名空间中可用
                 core_module.__dict__.update({
-
                     'os': os,
                     'sys': sys,
                     'json': json,
@@ -1847,6 +1853,7 @@ class ModelManagerGUI:
                     '__file__': core_py_path,
                     '__name__': 'core.core'
                 })
+
                 
                 # 执行模块
                 spec.loader.exec_module(core_module)
@@ -1948,6 +1955,7 @@ class ModelManagerGUI:
                         # 🚨 修复：只处理第一次完成消息
                         if not completion_processed:
                             completion_processed = True
+                            self.running = False
                             self.status_var.set("运行完成")
                             self.progress_var.set(100)
                             self.run_button.config(state=tk.NORMAL)
@@ -1958,10 +1966,12 @@ class ModelManagerGUI:
                     elif msg_type == "error":
                         # 🚨 修复：记录错误状态，阻止成功消息显示
                         error_occurred = True
+                        self.running = False
                         self.status_var.set("运行出错")
                         self.run_button.config(state=tk.NORMAL)
                         self.stop_button.config(state=tk.DISABLED)
                         messagebox.showerror("错误", f"运行出错: {msg}")
+
                         
                 except queue.Empty:
                     break
@@ -2429,20 +2439,70 @@ class ModelManagerGUI:
         except Exception as e:
             pass
     
+    def _normalize_dir_path(self, path):
+        """规范化目录路径"""
+        if not path:
+            return ""
+        return os.path.normpath(str(path).strip())
+    
+    def _check_directory_access(self, dir_path):
+        """检查目录存在性与权限"""
+        try:
+            normalized = self._normalize_dir_path(dir_path)
+            if not normalized:
+                return False, "路径为空"
+            if not os.path.exists(normalized):
+                return False, "不存在"
+            if not os.path.isdir(normalized):
+                return False, "不是目录"
+            can_read = os.access(normalized, os.R_OK)
+            can_write = os.access(normalized, os.W_OK)
+            if not can_read and not can_write:
+                return False, "无读写权限"
+            if not can_read:
+                return False, "无读权限"
+            if not can_write:
+                return False, "无写权限"
+            return True, "可访问"
+        except Exception as e:
+            return False, f"访问失败: {e}"
+    
+    def _directory_status_label(self, dir_path):
+        """生成目录状态文本"""
+        ok, reason = self._check_directory_access(dir_path)
+        return "✓ 可访问" if ok else f"✗ {reason}"
+    
+    def _validate_local_dirs(self, local_roots):
+        """校验并返回可用目录列表及错误信息"""
+        valid_dirs = []
+        errors = []
+        for raw in local_roots or []:
+            normalized = self._normalize_dir_path(raw)
+            if not normalized:
+                continue
+            ok, reason = self._check_directory_access(normalized)
+            if ok:
+                valid_dirs.append(normalized)
+            else:
+                errors.append(f"{normalized} - {reason}")
+        return valid_dirs, errors
+    
     def add_directory(self):
         """添加新的目录到列表"""
         dir_path = filedialog.askdirectory(title="选择视频目录")
         if dir_path:
+            normalized = self._normalize_dir_path(dir_path)
             # 检查目录是否已存在
             for child in self.dirs_tree.get_children():
-                if self.dirs_tree.item(child)['values'][0] == dir_path:
+                if self._normalize_dir_path(self.dirs_tree.item(child)['values'][0]) == normalized:
                     messagebox.showwarning("提示", "该目录已存在于列表中")
                     return
             
             # 检查目录状态
-            status = "✓ 可访问" if os.path.exists(dir_path) else "✗ 不存在"
-            self.dirs_tree.insert('', tk.END, values=(dir_path, status))
+            status = self._directory_status_label(normalized)
+            self.dirs_tree.insert('', tk.END, values=(normalized, status))
             self.save_directories_to_config()
+
     
     def remove_selected_directory(self):
         """删除选中的目录"""
@@ -2458,16 +2518,18 @@ class ModelManagerGUI:
     def refresh_directory_status(self):
         """刷新所有目录的状态"""
         for child in self.dirs_tree.get_children():
-            dir_path = self.dirs_tree.item(child)['values'][0]
-            status = "✓ 可访问" if os.path.exists(dir_path) else "✗ 不存在"
+            dir_path = self._normalize_dir_path(self.dirs_tree.item(child)['values'][0])
+            status = self._directory_status_label(dir_path)
             self.dirs_tree.item(child, values=(dir_path, status))
+
     
     def save_directories_to_config(self):
         """保存目录列表到配置文件"""
         directories = []
         for child in self.dirs_tree.get_children():
-            dir_path = self.dirs_tree.item(child)['values'][0]
-            directories.append(dir_path)
+            dir_path = self._normalize_dir_path(self.dirs_tree.item(child)['values'][0])
+            if dir_path:
+                directories.append(dir_path)
         
         # 更新config.yaml
         try:
@@ -2476,6 +2538,7 @@ class ModelManagerGUI:
             self.save_config(config)
         except Exception as e:
             self.add_log(f"保存目录配置失败: {e}")
+
     
     def load_directories_from_config(self):
         """从配置文件加载目录列表"""
@@ -2489,11 +2552,15 @@ class ModelManagerGUI:
             
             # 添加目录到列表
             for directory in local_roots:
-                status = "✓ 可访问" if os.path.exists(directory) else "✗ 不存在"
-                self.dirs_tree.insert('', tk.END, values=(directory, status))
+                normalized = self._normalize_dir_path(directory)
+                if not normalized:
+                    continue
+                status = self._directory_status_label(normalized)
+                self.dirs_tree.insert('', tk.END, values=(normalized, status))
                 
         except Exception as e:
             self.add_log(f"加载目录配置失败: {e}")
+
 
     def load_local_dirs(self):
         """加载本地目录配置（多目录管理模式）"""
