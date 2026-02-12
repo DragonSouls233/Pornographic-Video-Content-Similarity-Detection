@@ -14,16 +14,18 @@ class PornDownloadHandler:
     """PORN下载处理器，提供详细的错误处理和反馈"""
     
     def __init__(self, progress_callback: Optional[Callable] = None, 
-                 log_callback: Optional[Callable] = None):
+                 log_callback: Optional[Callable] = None, auto_continue: bool = True):
         """
         初始化下载处理器
         
         Args:
             progress_callback: 进度更新回调函数
             log_callback: 日志记录回调函数
+            auto_continue: 是否自动继续（默认Y）
         """
         self.progress_callback = progress_callback
         self.log_callback = log_callback
+        self.auto_continue = auto_continue
     
     def log(self, message: str):
         """记录日志"""
@@ -31,6 +33,35 @@ class PornDownloadHandler:
             self.log_callback(message)
         else:
             logger.info(message)
+    
+    def ask_continue(self, message: str, default: str = "y") -> bool:
+        """
+        询问是否继续，支持自动继续模式
+        
+        Args:
+            message: 询问消息
+            default: 默认选择，'y'或'n'
+            
+        Returns:
+            bool: True表示继续，False表示停止
+        """
+        if self.auto_continue:
+            # 自动继续模式，直接返回默认选择
+            choice = default.lower()
+            result = choice == 'y'
+            self.log(f"[自动继续] {message} -> {'继续' if result else '停止'}")
+            return result
+        
+        # 手动模式，需要用户确认（保留原有逻辑以兼容）
+        try:
+            from tkinter import messagebox
+            result = messagebox.askyesno("确认", message)
+            self.log(f"[用户确认] {message} -> {'继续' if result else '停止'}")
+            return result
+        except:
+            # 如果GUI不可用，默认继续
+            self.log(f"[默认继续] {message} -> 继续")
+            return True
     
     def execute_download(self, downloader, i: int, total_count: int, 
                         model: str, title: str, url: str, 

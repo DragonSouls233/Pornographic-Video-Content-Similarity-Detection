@@ -71,6 +71,7 @@ class ModelResult:
     local_folder: str = ""
     country: str = ""
     local_folder_full: str = ""  # 本地目录完整路径
+    source: str = "local"  # 数据来源：local/online/cache
 
 
 class ModelProcessor:
@@ -301,7 +302,8 @@ class ModelProcessor:
                 url=url,
                 local_folder=original_dir,
                 local_folder_full=folder,
-                country=country
+                country=country,
+                source="online" if online_set else "local"
             )
             
             # 如果有缺失视频，记录到日志
@@ -454,7 +456,8 @@ class ModelProcessor:
                 error_message=str(e),
                 country=country,
                 local_folder=original_dir,
-                local_folder_full=folder
+                local_folder_full=folder,
+                source="local"
             )
 
 

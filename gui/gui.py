@@ -11,6 +11,12 @@ from datetime import datetime
 from typing import Dict, Optional
 import sys
 
+# 导入独立监控窗口
+try:
+    from gui.modern_progress_window import get_progress_window, add_task, update_task_status, add_log
+except ImportError:
+    from modern_progress_window import get_progress_window, add_task, update_task_status, add_log
+
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
@@ -108,6 +114,9 @@ class ModelManagerGUI:
         self.thread = None
         self.public_ip_var = tk.StringVar(value="000.000.000.000")
         
+        # 初始化独立监控窗口的日志同步
+        self.progress_window_log_queue = queue.Queue()
+        
         # 🚨 关键修复：提前定义QueueHandler类
         self._setup_queue_handler()
     
@@ -152,6 +161,8 @@ class ModelManagerGUI:
         tool_menu.add_command(label="打开日志目录", command=self.open_log_dir)
         tool_menu.add_separator()
         tool_menu.add_command(label="打开独立浏览器", command=self.open_browser_window)
+        tool_menu.add_separator()
+        tool_menu.add_command(label="打开独立监控窗口", command=self.open_progress_window)
         menubar.add_cascade(label="工具", menu=tool_menu)
         
         # 帮助菜单
@@ -338,8 +349,20 @@ class ModelManagerGUI:
         self.delay_var = tk.StringVar(value="2.0-3.5")
         ttk.Entry(config_frame, textvariable=self.delay_var, width=10).pack(side=tk.LEFT)
         
-        # 运行按钮
-        run_frame = ttk.Frame(frame)
+        # 进度显示区域（右侧侧栏 + 三列任务卡片 + 可折叠日志）
+        progress_container = ttk.Frame(frame)
+        progress_container.pack(fill=tk.BOTH, expand=True)
+        progress_container.columnconfigure(0, weight=4)  # 左侧主区域占更多空间
+        progress_container.columnconfigure(1, weight=2)  # 右侧进度监控
+        
+        left_main = ttk.LabelFrame(progress_container, text="主控制区", padding="10")
+        left_main.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        
+        right_sidebar = ttk.LabelFrame(progress_container, text="进度监控", padding="8")
+        right_sidebar.grid(row=0, column=1, sticky="nsew")
+        
+        # 运行按钮（移到左侧主区域）
+        run_frame = ttk.Frame(left_main)
         run_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.run_button = ttk.Button(run_frame, text="开始运行", command=self.start_run, width=20)
@@ -347,18 +370,6 @@ class ModelManagerGUI:
         
         self.stop_button = ttk.Button(run_frame, text="停止运行", command=self.stop_run, width=20, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT)
-        
-        # 进度显示区域（右侧侧栏 + 三列任务卡片 + 可折叠日志）
-        progress_container = ttk.Frame(frame)
-        progress_container.pack(fill=tk.BOTH, expand=True)
-        progress_container.columnconfigure(0, weight=1)
-        progress_container.columnconfigure(1, weight=0)
-        
-        left_main = ttk.Frame(progress_container)
-        left_main.grid(row=0, column=0, sticky="nsew")
-        
-        right_sidebar = ttk.LabelFrame(progress_container, text="进度监控", padding="8")
-        right_sidebar.grid(row=0, column=1, sticky="ns", padx=(10, 0))
         
         # 总进度与状态
         total_progress_frame = ttk.Frame(right_sidebar)
@@ -386,18 +397,20 @@ class ModelManagerGUI:
         
         self.task_cards = []
         for idx in range(3):
-            card = ttk.LabelFrame(tasks_frame, text=f"任务 {idx + 1}", padding="6")
-            card.grid(row=0, column=idx, padx=4, pady=4, sticky="nsew")
+            card = ttk.LabelFrame(tasks_frame, text=f"任务 {idx + 1}", padding="4")
+            card.grid(row=0, column=idx, padx=2, pady=2, sticky="nsew")
             
             name_var = tk.StringVar(value="等待任务")
-            ttk.Label(card, textvariable=name_var).pack(anchor=tk.W)
+            name_label = ttk.Label(card, textvariable=name_var, font=("SimHei", 8))
+            name_label.pack(anchor=tk.W, fill=tk.X)
             
             progress_var = tk.DoubleVar(value=0)
             progress_bar = ttk.Progressbar(card, variable=progress_var, maximum=100)
-            progress_bar.pack(fill=tk.X, pady=2)
+            progress_bar.pack(fill=tk.X, pady=1)
             
             percent_var = tk.StringVar(value="0%")
-            ttk.Label(card, textvariable=percent_var).pack(anchor=tk.E)
+            percent_label = ttk.Label(card, textvariable=percent_var, font=("SimHei", 8))
+            percent_label.pack(anchor=tk.E)
             
             self.task_cards.append({
                 "name_var": name_var,
@@ -421,8 +434,8 @@ class ModelManagerGUI:
         self.log_panel_body = ttk.Frame(log_container)
         self.log_panel_body.pack(fill=tk.BOTH, expand=True)
         
-        self.log_text = tk.Text(self.log_panel_body, height=10, wrap=tk.WORD, font=("Consolas", 9))
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.log_text = tk.Text(self.log_panel_body, height=12, wrap=tk.WORD, font=("Consolas", 8))
+        self.log_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         
         scrollbar = ttk.Scrollbar(self.log_panel_body, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscroll=scrollbar.set)
@@ -1113,12 +1126,23 @@ class ModelManagerGUI:
             self.log_download_message(f"URL: {url}", "INFO")
             self.log_download_message("开始下载...", "INFO")
             
+            # 创建下载器（集成自动继续功能）
+            from gui.porn_download_handler import PornDownloadHandler
+            
+            # 创建下载处理器，启用自动继续
+            download_handler = PornDownloadHandler(
+                progress_callback=self._download_progress_callback,
+                log_callback=lambda msg: self.log_download_message(msg, "INFO"),
+                auto_continue=True  # 默认自动继续
+            )
+            
             # 创建下载器
             downloader = UnifiedDownloader(
                 config=config,
                 version=version,
                 enable_fallback=config.get("download", {}).get("enable_fallback", True),
-                progress_callback=self._download_progress_callback
+                progress_callback=self._download_progress_callback,
+                download_handler=download_handler  # 传入下载处理器
             )
             
             # 执行下载
@@ -1318,13 +1342,17 @@ class ModelManagerGUI:
             try:
                 from core.modules.common.model_database import ModelDatabase
                 db = ModelDatabase('models.db')
-                models_dict = db.load_models()
+                
+                # 获取完整的模特信息（包含模块）
+                models_list = db.get_all_models()
                 
                 # 转换为GUI期望的格式
                 self.models = {}
-                for name, url in models_dict.items():
-                    # 根据URL自动判断模块类型
-                    module = "JAVDB" if "javdb" in url.lower() else "PORN"
+                for model in models_list:
+                    name = model['name']
+                    url = model['url']
+                    module = model.get('module', 'PORN')  # 从数据库获取模块信息
+                    
                     self.models[name] = {
                         "module": module,
                         "url": url
@@ -1389,9 +1417,12 @@ class ModelManagerGUI:
                 from core.modules.common.model_database import DatabaseModelAdapter
                 db_adapter = DatabaseModelAdapter('models.db')
                 
-                # 转换为简单字典格式
-                simple_models = {name: info['url'] for name, info in self.models.items()}
-                db_adapter.save_models(simple_models)
+                # 保存到数据库（包含完整信息）
+                for name, info in self.models.items():
+                    if isinstance(info, dict):
+                        module = info.get('module', 'PORN')
+                        url = info.get('url', '')
+                        db_adapter.add_model(name, url, module)
                 
                 self.logger.debug(f"已保存 {len(self.models)} 个模特到数据库")
                 
@@ -1749,7 +1780,14 @@ class ModelManagerGUI:
             
             # 更新模型字典
             if new_model_name != model_name:
-                # 如果名称改变，删除旧的，添加新的
+                # 如果名称改变，先从数据库删除旧的，再添加新的
+                try:
+                    from core.modules.common.model_database import DatabaseModelAdapter
+                    db_adapter = DatabaseModelAdapter('models.db')
+                    db_adapter.remove_model(model_name)  # 删除旧记录
+                except Exception as e:
+                    self.logger.warning(f"删除旧模特记录失败: {e}")
+                
                 del self.models[model_name]
                 self.models[new_model_name] = {
                     "module": new_module,
@@ -2253,6 +2291,22 @@ class ModelManagerGUI:
                     elif msg_type == "log":
                         self.log_text.insert(tk.END, msg + "\n")
                         self.log_text.see(tk.END)
+                        
+                        # 同步到独立监控窗口
+                        try:
+                            # 尝试提取级别信息
+                            level = "INFO"
+                            if "[ERROR]" in msg:
+                                level = "ERROR"
+                            elif "[WARNING]" in msg:
+                                level = "WARNING"
+                            elif "[DEBUG]" in msg:
+                                level = "DEBUG"
+                            
+                            add_log(msg, level)
+                        except Exception:
+                            # 如果独立窗口不可用，暂存到队列
+                            self.progress_window_log_queue.put((msg, level))
                     elif msg_type == "progress":
                         self.progress_var.set(msg)
                         if hasattr(self, 'progress_percent_var'):
@@ -2624,6 +2678,24 @@ class ModelManagerGUI:
             os.startfile(log_dir)
         except Exception as e:
             messagebox.showerror("错误", f"无法打开日志目录: {e}")
+    
+    def open_progress_window(self):
+        """打开独立监控窗口"""
+        try:
+            progress_window = get_progress_window(self.root)
+            progress_window.show()
+            
+            # 同步暂存的日志
+            while not self.progress_window_log_queue.empty():
+                try:
+                    message, level = self.progress_window_log_queue.get_nowait()
+                    add_log(message, level)
+                except queue.Empty:
+                    break
+            
+            messagebox.showinfo("成功", "独立监控窗口已打开")
+        except Exception as e:
+            messagebox.showerror("错误", f"打开独立监控窗口失败: {e}")
     
     def update_results_display(self, results):
         """更新结果显示标签页"""

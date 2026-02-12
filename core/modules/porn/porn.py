@@ -21,16 +21,11 @@ def fetch_with_requests_porn(url: str, logger, max_pages: int = -1, config: dict
     # 🚨 关键修复：对于模特页面，强制使用更严格的抓取模式
     if model_name and '/model/' in url:
         logger.info(f"  🎯 检测到模特专属页面，启用严格抓取模式")
-        # 强制禁用缓存以确保获取最新、最准确的数据
-        original_cache_enabled = config.get('cache', {}).get('enabled', True)
+        # 模特页：强制清理该模特缓存，避免历史误抓导致的“视频数暴涨”
         if smart_cache and smart_cache.enabled:
-            logger.info(f"  🚨 临时禁用缓存以确保数据准确性")
-            # 临时清除该模特的缓存
+            logger.info(f"  🚨 模特页启用严格模式：清理 {model_name} 的缓存")
             try:
-                cache_file = os.path.join(smart_cache.cache_dir, f"{model_name}.json")
-                if os.path.exists(cache_file):
-                    os.remove(cache_file)
-                    logger.info(f"  ✅ 已清除 {model_name} 的缓存文件")
+                smart_cache.clear_cache(model_name)
             except Exception as e:
                 logger.warning(f"  ⚠️ 缓存清除失败: {e}")
     
@@ -593,106 +588,95 @@ def fetch_with_requests_only_porn(url: str, logger, max_pages: int = -1, config:
     return all_titles, title_to_url
 
 def _is_video_belong_to_model(video_container, model_name: str, model_url: str, logger) -> bool:
-    """
-    验证视频是否属于指定模特 - 严格验证版本
-    
-    Args:
-        video_container: 视频容器元素
-        model_name: 目标模特名称
-        model_url: 模特页面URL
-        logger: 日志记录器
-        
-    Returns:
-        bool: True表示属于该模特，False表示不属于
-    """
+    """验证视频是否属于指定模特（更严格：防止把推荐/热门视频算进来）"""
+
+    def _norm(s: str) -> str:
+        return (s or "").lower().strip()
+
+    def _norm_compact(s: str) -> str:
+        return _norm(s).replace(' ', '').replace('_', '').replace('-', '')
+
+    def _extract_model_slug(u: str) -> str:
+        try:
+            m = re.search(r"/model/([^/?#]+)/?", u or "")
+            if not m:
+                return ""
+            return _norm(m.group(1)).replace('%20', '-')
+        except Exception:
+            return ""
+
     try:
-        # 🚨 关键修复：更严格的验证逻辑
-        
-        # 方法1: 检查页面上下文（最高优先级）
-        # 如果是模特专属页面(/model/路径)，则必须严格验证
+        model_url = model_url or ""
+        target_slug_from_url = _extract_model_slug(model_url)
+        target_slug_from_name = _norm(model_name).replace(' ', '-')
+        target_compact = _norm_compact(model_name)
+
+        # 在模特专属页：必须看到“归属证据”才接受
         if '/model/' in model_url:
-            # 在模特专属页面上，检查是否明确属于其他模特
+            # 证据1：容器内出现指向该模特的链接
+            model_links = []
+            for a in video_container.find_all('a', href=True):
+                href = a.get('href', '')
+                if href and '/model/' in href:
+                    model_links.append(href)
+
+            if model_links:
+                def _match_slug(link: str) -> bool:
+                    link_l = _norm(link)
+                    # 既匹配URL里的slug，也匹配由名字推导的slug
+                    if target_slug_from_url and target_slug_from_url in link_l:
+                        return True
+                    if target_slug_from_name and target_slug_from_name in link_l:
+                        return True
+                    # 再做一次紧凑匹配（容错大小写/分隔符）
+                    return target_compact and target_compact in _norm_compact(link_l)
+
+                if any(_match_slug(l) for l in model_links):
+                    return True
+
+                # 有模特链接但不匹配 -> 明确不属于
+                return False
+
+            # 证据2：容器内显示了上传者/模特名（文本）并与目标匹配
             model_indicators = video_container.select(
                 '.username, .uploader, .channelName, .modelName, '
                 '.userInfo .usernameWrap, [data-user-name], [data-channel-name]'
             )
-            
-            # 收集所有模特标识
+
             found_models = []
             for indicator in model_indicators:
-                indicator_text = indicator.get_text(strip=True)
-                if indicator_text and len(indicator_text) > 1:  # 过滤太短的文本
-                    found_models.append(indicator_text.lower().strip())
-            
-            # 如果找到了模特标识
+                t = indicator.get_text(strip=True)
+                if t and len(t) > 1:
+                    found_models.append(_norm(t))
+
             if found_models:
-                # 标准化目标模特名
-                target_clean = model_name.lower().replace(' ', '').replace('_', '').replace('-', '')
-                
-                # 检查是否有匹配的目标模特
-                has_target_match = any(
-                    target_clean in model_text or model_text in target_clean
-                    for model_text in found_models
-                )
-                
-                # 检查是否有其他明确的模特标识
-                has_other_model = any(
-                    len(model_text) > 3 and model_text != target_clean and 
-                    not (target_clean in model_text or model_text in target_clean)
-                    for model_text in found_models
-                )
-                
-                if has_target_match and not has_other_model:
-                    logger.debug(f"    ✅ 模特专属页面验证通过: {model_name}")
+                # 有指示文本时：必须能匹配目标，否则拒绝
+                if any(target_compact in _norm_compact(t) or _norm_compact(t) in target_compact for t in found_models):
                     return True
-                elif has_other_model:
-                    logger.debug(f"    ❌ 发现其他模特标识，拒绝视频: {found_models}")
-                    return False
-                else:
-                    # 没有明确的模特标识，但在模特页面上，倾向于接受
-                    logger.debug(f"    ⚠️ 模特页面无明确标识，谨慎接受: {model_name}")
-                    return True
-            else:
-                # 没有找到任何模特标识，在模特页面上，默认接受
-                logger.debug(f"    ✅ 模特专属页面，无其他标识，默认接受: {model_name}")
-                return True
-        
-        # 方法2: 检查视频链接是否指向正确的模特页面
-        video_links = video_container.find_all('a', href=True)
-        model_links = []
-        other_links = []
-        
-        for link in video_links:
-            href = link.get('href', '')
-            if href:
-                if '/model/' in href:
-                    model_links.append(href)
-                elif '/view_video.php' in href or '/video/' in href:
-                    other_links.append(href)
-        
-        # 如果有模特链接，检查是否匹配
-        if model_links:
-            target_model_slug = model_name.lower().replace(' ', '-')
-            has_target_link = any(target_model_slug in link.lower() for link in model_links)
-            has_other_model_link = any(
-                '/model/' in link and target_model_slug not in link.lower()
-                for link in model_links
-            )
-            
-            if has_target_link and not has_other_model_link:
-                logger.debug(f"    ✅ 通过链接确认属于模特: {model_name}")
-                return True
-            elif has_other_model_link:
-                logger.debug(f"    ❌ 链接指向其他模特，拒绝视频")
                 return False
-        
-        # 方法3: 保守的默认策略 - 在不确定的情况下拒绝
-        logger.debug(f"    ⚠️ 无法明确验证视频归属，保守拒绝: {model_name}")
-        return False  # 默认严格拒绝，避免错误归类
-        
+
+            # 关键修复：没有任何归属证据时，拒绝（这类通常是推荐/热门/广告模块）
+            return False
+
+        # 非模特页：保持较保守策略（只要出现模特链接且匹配则接受）
+        video_links = video_container.find_all('a', href=True)
+        model_links = [l.get('href', '') for l in video_links if l.get('href') and '/model/' in l.get('href', '')]
+
+        if model_links:
+            target_model_slug = target_slug_from_url or target_slug_from_name
+            if target_model_slug:
+                has_target_link = any(target_model_slug in _norm(link) for link in model_links)
+                has_other_model_link = any('/model/' in _norm(link) and target_model_slug not in _norm(link) for link in model_links)
+                if has_target_link and not has_other_model_link:
+                    return True
+                if has_other_model_link:
+                    return False
+
+        return False
+
     except Exception as e:
-        logger.debug(f"    ⚠️ 模特验证出现异常: {e}，保守拒绝视频")
-        return False  # 出现异常时严格拒绝
+        logger.debug(f"    ⚠️ 模特验证异常: {e}，保守拒绝")
+        return False
 
 
 def clean_porn_title(title: str, patterns: List[str]) -> str:
