@@ -300,34 +300,19 @@ class ModelManagerGUI:
         # 传统单目录配置（保持兼容性）
         ttk.Label(config_frame, text="传统配置 (兼容模式):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(15, 5))
         
-        # PORN目录配置
-        porn_frame = ttk.LabelFrame(config_frame, text="PORN目录", padding="10")
-        porn_frame.pack(fill=tk.X, pady=5)
+        # 多目录管理模式说明
+        info_frame = ttk.LabelFrame(config_frame, text="多目录管理模式", padding="10")
+        info_frame.pack(fill=tk.X, pady=5)
         
-        porn_entry_frame = ttk.Frame(porn_frame)
-        porn_entry_frame.pack(fill=tk.X)
+        info_label = ttk.Label(info_frame, 
+                              text="系统已切换到多目录管理模式，请使用上方的目录管理功能来配置本地视频目录。\n"
+                                   "您可以添加、删除和管理多个本地目录路径。",
+                              wraplength=600,
+                              justify=tk.LEFT)
+        info_label.pack(fill=tk.X)
         
-        ttk.Label(porn_entry_frame, text="模特目录:").pack(side=tk.LEFT)
-        self.porn_dir_var = tk.StringVar()
-        self.porn_dir_entry = ttk.Entry(porn_entry_frame, textvariable=self.porn_dir_var, width=50)
-        self.porn_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
-        ttk.Button(porn_entry_frame, text="浏览", command=self.browse_porn_dir, width=10).pack(side=tk.RIGHT)
-        
-        # JAV目录配置
-        jav_frame = ttk.LabelFrame(config_frame, text="JAV目录", padding="10")
-        jav_frame.pack(fill=tk.X, pady=5)
-        
-        jav_entry_frame = ttk.Frame(jav_frame)
-        jav_entry_frame.pack(fill=tk.X)
-        
-        ttk.Label(jav_entry_frame, text="模特目录:").pack(side=tk.LEFT)
-        self.jav_dir_var = tk.StringVar()
-        self.jav_dir_entry = ttk.Entry(jav_entry_frame, textvariable=self.jav_dir_var, width=50)
-        self.jav_dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
-        ttk.Button(jav_entry_frame, text="浏览", command=self.browse_jav_dir, width=10).pack(side=tk.RIGHT)
-        
-        # 加载保存的目录配置
-        self.load_local_dirs()
+        # 加载多目录配置
+        self.load_directories_from_config()
         
         # 抓取工具选择（固定为selenium）
         ttk.Label(config_frame, text="抓取工具: ").pack(side=tk.LEFT)
@@ -1730,14 +1715,14 @@ class ModelManagerGUI:
     def run_script(self):
         """在线程中运行查重脚本"""
         try:
-            # 获取本地目录
-            porn_dir = self.porn_dir_var.get().strip()
-            jav_dir = self.jav_dir_var.get().strip()
-            dirs = [d for d in [porn_dir, jav_dir] if d]  # 测诽算法：筛选有效目录
+            # 从多目录配置中获取本地目录
+            config = self.load_config()
+            local_roots = config.get('local_roots', [])
+            dirs = [d for d in local_roots if d and os.path.exists(d)]  # 筛选有效且存在的目录
             
             if not dirs:
                 self.log_text.delete(1.0, tk.END)
-                self.log_text.insert(tk.END, "错误: 没有配置本地目录\n请先在配置中添加 PORN 或 JAV 目录")
+                self.log_text.insert(tk.END, "错误: 没有配置有效的本地目录\n请先在目录管理中添加本地视频目录")
                 return
             
             # 导入核心模块（使用动态导入方式）
@@ -2280,19 +2265,7 @@ class ModelManagerGUI:
         
         messagebox.showinfo("使用说明", help_text)
     
-    def browse_porn_dir(self):
-        """浏览PORN目录"""
-        directory = filedialog.askdirectory(title="选择PORN模特目录")
-        if directory:
-            self.porn_dir_var.set(directory)
-            self.save_local_dirs()
-    
-    def browse_jav_dir(self):
-        """浏览JAV目录"""
-        directory = filedialog.askdirectory(title="选择JAV模特目录")
-        if directory:
-            self.jav_dir_var.set(directory)
-            self.save_local_dirs()
+
     
     def save_local_dirs(self):
         """保存本地目录配置"""
@@ -2375,30 +2348,11 @@ class ModelManagerGUI:
             self.add_log(f"加载目录配置失败: {e}")
 
     def load_local_dirs(self):
-        """加载本地目录配置"""
+        """加载本地目录配置（多目录管理模式）"""
         try:
-            # 优先从config.yaml加载
-            config = self.load_config()
-            local_roots = config.get('local_roots', [])
-            
-            # 加载到新的目录管理界面
+            # 从config.yaml加载多目录配置
             self.load_directories_from_config()
-            
-            # 兼容旧的单目录配置显示
-            if local_roots:
-                # 使用第一个目录作为传统配置显示
-                first_dir = local_roots[0] if local_roots else ""
-                self.porn_dir_var.set(first_dir)
-                self.jav_dir_var.set(first_dir)
-            else:
-                # 设置默认值
-                self.porn_dir_var.set("F:/作品")
-                self.jav_dir_var.set("F:/作品")
-                
         except Exception as e:
-            # 设置默认值
-            self.porn_dir_var.set("F:/作品")
-            self.jav_dir_var.set("F:/作品")
             self.add_log(f"加载本地目录配置失败: {e}")
     
     def show_about(self):
@@ -3061,9 +3015,10 @@ class ModelManagerGUI:
     
     def _select_download_directory(self):
         """询问用户选择下载目录"""
-        # 获取配置中的默认目录
-        porn_dir = self.porn_dir_var.get().strip()
-        jav_dir = self.jav_dir_var.get().strip()
+        # 从多目录配置中获取目录
+        config = self.load_config()
+        local_roots = config.get('local_roots', [])
+        first_dir = local_roots[0] if local_roots else ""
         
         # 创建目录选择对话框
         dialog = tk.Toplevel(self.root)
@@ -3076,40 +3031,29 @@ class ModelManagerGUI:
         
         selected_dir = [None]  # 使用列表以供闭包修改
         
-        def select_pornhub():
-            if porn_dir:
-                selected_dir[0] = porn_dir
+        def select_first_dir():
+            if first_dir:
+                selected_dir[0] = first_dir
                 dialog.destroy()
             else:
-                messagebox.showwarning("提示", "未配置 PORN 目录")
-        
-        def select_javdb():
-            if jav_dir:
-                selected_dir[0] = jav_dir
-                dialog.destroy()
-            else:
-                messagebox.showwarning("提示", "未配置 JAVDB 目录")
+                messagebox.showwarning("提示", "未配置本地目录")
         
         def custom_directory():
             dir_path = filedialog.askdirectory(
                 title="选择本地保存目录",
-                initialdir=porn_dir or jav_dir or os.path.expanduser("~")
+                initialdir=first_dir or os.path.expanduser("~")
             )
             if dir_path:
                 selected_dir[0] = dir_path
                 dialog.destroy()
         
-        # 按钒框架
+        # 按钮框架
         button_frame = ttk.Frame(dialog)
         button_frame.pack(pady=20, fill=tk.X, padx=20)
         
-        if porn_dir:
-            ttk.Button(button_frame, text=f"PORN 目录\n{porn_dir}", 
-                      command=select_pornhub, width=40).pack(fill=tk.X, pady=5)
-        
-        if jav_dir:
-            ttk.Button(button_frame, text=f"JAVDB 目录\n{jav_dir}", 
-                      command=select_javdb, width=40).pack(fill=tk.X, pady=5)
+        if first_dir:
+            ttk.Button(button_frame, text=f"默认目录\n{first_dir}", 
+                      command=select_first_dir, width=40).pack(fill=tk.X, pady=5)
         
         ttk.Button(button_frame, text="自定义目录", 
                   command=custom_directory, width=40).pack(fill=tk.X, pady=5)

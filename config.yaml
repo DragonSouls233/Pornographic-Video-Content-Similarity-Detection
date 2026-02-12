@@ -74,8 +74,12 @@ filename_cleaning:
     normalize_spaces: true
     trim: true
 local_roots:
-  - F:/作品
-  - F:/作品/PORN测试
+  # 多目录管理模式 - 请在此处配置您的本地视频目录
+  # 示例格式：
+  # - "D:/Videos/PORN"
+  # - "E:/收藏/欧美作品" 
+  # - "F:/JAV收藏"
+  []
 local_scan:
   category_scan:
     general:
