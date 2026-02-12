@@ -261,6 +261,25 @@ class ModelProcessor:
             # 对比找出缺失视频（用所有在线视频对比，不只是新增的）
             missing = online_set - local_set_with_downloaded
             
+            # 补全缓存中的URL映射，避免增量模式下出现空链接
+            resolved_title_to_url = dict(title_to_url)
+            if self.smart_cache and self.smart_cache.enabled:
+                for title in online_set:
+                    if not resolved_title_to_url.get(title):
+                        cached_url = self.smart_cache.get_video_url(model_name, title)
+                        if cached_url:
+                            resolved_title_to_url[title] = cached_url
+            
+            def _is_valid_url(url_value):
+                return isinstance(url_value, str) and url_value.strip().startswith(("http://", "https://"))
+            
+            # 过滤无连接的内容
+            missing_with_urls = [
+                (title, resolved_title_to_url.get(title, ""))
+                for title in missing
+                if _is_valid_url(resolved_title_to_url.get(title, ""))
+            ]
+            
             # 记录原始本地数量和实际用于对比的数量
             original_local_count = len(local_set)
             effective_local_count = len(local_set_with_downloaded)
@@ -278,7 +297,7 @@ class ModelProcessor:
                 new_videos_count=len(new_videos),
                 missing_count=len(missing),
                 missing_titles=sorted(list(missing)),
-                missing_with_urls=[(title, title_to_url.get(title, "")) for title in missing],
+                missing_with_urls=missing_with_urls,
                 url=url,
                 local_folder=original_dir,
                 local_folder_full=folder,
@@ -288,7 +307,13 @@ class ModelProcessor:
             # 如果有缺失视频，记录到日志
             if missing:
                 sorted_missing = sorted(list(missing))
-                missing_with_urls = [(title, title_to_url.get(title, "")) for title in sorted_missing]
+                
+                # 过滤无连接的内容，并记录过滤数量
+                filtered_count = len(sorted_missing) - len(missing_with_urls)
+                if filtered_count > 0:
+                    self.logger.warning(
+                        f"[线程-{thread_id}] {model_name}: 过滤 {filtered_count} 条无效链接（未获取到URL）"
+                    )
                 
                 # 线程安全的日志记录
                 with threading.Lock():
@@ -359,6 +384,62 @@ class ModelProcessor:
                         # 更新智能缓存中的缺失视频列表（用于后续只更新）
                         if self.smart_cache and self.smart_cache.enabled:
                             self.smart_cache.update_missing_videos(model_name, missing_with_urls)
+                
+                # 生成模特级链接校验报告
+                links_report_file = os.path.join(
+                    country_model_dir,
+                    f"{model_name}_链接报告_{datetime.now().strftime('%Y%m%d')}.txt"
+                )
+                valid_links = [
+                    (title, resolved_title_to_url.get(title, ""))
+                    for title in sorted(online_set)
+                    if _is_valid_url(resolved_title_to_url.get(title, ""))
+                ]
+                invalid_titles = [
+                    title for title in sorted(online_set)
+                    if not _is_valid_url(resolved_title_to_url.get(title, ""))
+                ]
+                local_titles = sorted(local_set)
+                downloaded_only = sorted(downloaded_videos - local_set)
+                
+                with open(links_report_file, 'w', encoding='utf-8') as f:
+                    f.write("=" * 70 + "\n")
+                    f.write(f"模特链接校验报告 - {model_name}\n")
+                    f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"模特链接: {url}\n")
+                    f.write("=" * 70 + "\n\n")
+                    f.write("统计信息:\n")
+                    f.write(f"- 在线视频总数: {len(online_set)}\n")
+                    f.write(f"- 有效链接数量: {len(valid_links)}\n")
+                    f.write(f"- 无效/缺失链接数量: {len(invalid_titles)}\n")
+                    f.write(f"- 本地视频数量: {len(local_set)}\n")
+                    f.write(f"- 已下载视频数量: {len(downloaded_videos)}\n")
+                    f.write(f"- 本地对比视频总数(本地+已下载): {len(local_set_with_downloaded)}\n")
+                    f.write("\n")
+                    
+                    f.write("本地对比视频标记:\n")
+                    f.write("-" * 40 + "\n")
+                    for title in local_titles:
+                        f.write(f"[本地] {title}\n")
+                    for title in downloaded_only:
+                        f.write(f"[已下载] {title}\n")
+                    f.write("\n")
+                    
+                    f.write("有效链接列表:\n")
+                    f.write("-" * 40 + "\n")
+                    for i, (title, video_url) in enumerate(valid_links, 1):
+                        f.write(f"{i:3d}. {title}\n")
+                        f.write(f"    链接: {video_url}\n")
+                    f.write("\n")
+                    
+                    if invalid_titles:
+                        f.write("无效/缺失链接列表:\n")
+                        f.write("-" * 40 + "\n")
+                        for i, title in enumerate(invalid_titles, 1):
+                            f.write(f"{i:3d}. {title}\n")
+                        f.write("\n")
+                
+                self.logger.info(f"[线程-{thread_id}] {model_name}: 📁 链接校验报告已保存")
                 
                 self.logger.info(f"[线程-{thread_id}] {model_name}: 📁 报告已保存")
             

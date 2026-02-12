@@ -177,6 +177,10 @@ class SmartCache:
         with self._lock:
             cache_path = self._get_cache_path(model_name)
             
+            # 确保metadata字段存在
+            if 'metadata' not in data:
+                data['metadata'] = {}
+            
             # 更新元数据
             data['last_updated'] = datetime.now().isoformat()
             data['metadata']['total_videos'] = len(data.get('videos', {}))

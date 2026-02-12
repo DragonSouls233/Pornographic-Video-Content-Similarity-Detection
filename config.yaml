@@ -219,7 +219,7 @@ porn:
 proxy:
   bypass_dpi: false
   download_limit: false
-  enabled: false
+  enabled: true
   host: 127.0.0.1
   http: ''
   https: ''

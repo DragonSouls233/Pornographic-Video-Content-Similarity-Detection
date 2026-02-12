@@ -348,34 +348,97 @@ class ModelManagerGUI:
         self.stop_button = ttk.Button(run_frame, text="停止运行", command=self.stop_run, width=20, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT)
         
-        # 进度显示区域
+        # 进度显示区域（右侧侧栏 + 三列任务卡片 + 可折叠日志）
         progress_container = ttk.Frame(frame)
         progress_container.pack(fill=tk.BOTH, expand=True)
+        progress_container.columnconfigure(0, weight=1)
+        progress_container.columnconfigure(1, weight=0)
         
-        # 查重进度区域
-        scan_progress_frame = ttk.LabelFrame(progress_container, text="查重进度", padding="10")
-        scan_progress_frame.pack(fill=tk.X, pady=(0, 5))
+        left_main = ttk.Frame(progress_container)
+        left_main.grid(row=0, column=0, sticky="nsew")
         
-        # 查重进度条
+        right_sidebar = ttk.LabelFrame(progress_container, text="进度监控", padding="8")
+        right_sidebar.grid(row=0, column=1, sticky="ns", padx=(10, 0))
+        
+        # 总进度与状态
+        total_progress_frame = ttk.Frame(right_sidebar)
+        total_progress_frame.pack(fill=tk.X, pady=(0, 8))
+        
         self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(scan_progress_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, pady=(0, 5))
+        self.progress_bar = ttk.Progressbar(total_progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X, pady=(0, 4))
         
-        # 查重状态信息
+        progress_info_frame = ttk.Frame(total_progress_frame)
+        progress_info_frame.pack(fill=tk.X)
+        
         self.status_var = tk.StringVar(value="就绪")
-        ttk.Label(scan_progress_frame, textvariable=self.status_var, font=("SimHei", 10)).pack(anchor=tk.W, pady=2)
+        ttk.Label(progress_info_frame, textvariable=self.status_var, font=("SimHei", 10)).pack(side=tk.LEFT)
         
-        # 查重日志显示
-        log_frame = ttk.LabelFrame(progress_container, text="查重日志", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        self.progress_percent_var = tk.StringVar(value="0%")
+        ttk.Label(progress_info_frame, textvariable=self.progress_percent_var).pack(side=tk.RIGHT)
         
-        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, font=("Consolas", 9))
+        # 三列并行任务卡片
+        tasks_frame = ttk.Frame(right_sidebar)
+        tasks_frame.pack(fill=tk.X, pady=(0, 8))
+        tasks_frame.columnconfigure(0, weight=1)
+        tasks_frame.columnconfigure(1, weight=1)
+        tasks_frame.columnconfigure(2, weight=1)
+        
+        self.task_cards = []
+        for idx in range(3):
+            card = ttk.LabelFrame(tasks_frame, text=f"任务 {idx + 1}", padding="6")
+            card.grid(row=0, column=idx, padx=4, pady=4, sticky="nsew")
+            
+            name_var = tk.StringVar(value="等待任务")
+            ttk.Label(card, textvariable=name_var).pack(anchor=tk.W)
+            
+            progress_var = tk.DoubleVar(value=0)
+            progress_bar = ttk.Progressbar(card, variable=progress_var, maximum=100)
+            progress_bar.pack(fill=tk.X, pady=2)
+            
+            percent_var = tk.StringVar(value="0%")
+            ttk.Label(card, textvariable=percent_var).pack(anchor=tk.E)
+            
+            self.task_cards.append({
+                "name_var": name_var,
+                "progress_var": progress_var,
+                "percent_var": percent_var
+            })
+        
+        # 可折叠日志面板（默认展开）
+        log_container = ttk.Frame(right_sidebar)
+        log_container.pack(fill=tk.BOTH, expand=True)
+        
+        log_header = ttk.Frame(log_container)
+        log_header.pack(fill=tk.X)
+        ttk.Label(log_header, text="查重日志").pack(side=tk.LEFT)
+        
+        self.log_panel_expanded = True
+        self.log_toggle_btn = ttk.Button(log_header, text="折叠")
+        self.log_toggle_btn.pack(side=tk.RIGHT, padx=(4, 0))
+        ttk.Button(log_header, text="清空", command=lambda: self.log_text.delete(1.0, tk.END)).pack(side=tk.RIGHT)
+        
+        self.log_panel_body = ttk.Frame(log_container)
+        self.log_panel_body.pack(fill=tk.BOTH, expand=True)
+        
+        self.log_text = tk.Text(self.log_panel_body, height=10, wrap=tk.WORD, font=("Consolas", 9))
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
-        # 添加滚动条
-        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar = ttk.Scrollbar(self.log_panel_body, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscroll=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        def toggle_log_panel():
+            if self.log_panel_expanded:
+                self.log_panel_body.pack_forget()
+                self.log_toggle_btn.config(text="展开")
+                self.log_panel_expanded = False
+            else:
+                self.log_panel_body.pack(fill=tk.BOTH, expand=True)
+                self.log_toggle_btn.config(text="折叠")
+                self.log_panel_expanded = True
+        
+        self.log_toggle_btn.config(command=toggle_log_panel)
         
         # 下载控制变量
         self.downloading = False
@@ -517,7 +580,9 @@ class ModelManagerGUI:
         self.stats_vars = {
             "processed": tk.StringVar(value="成功处理: 0"),
             "failed": tk.StringVar(value="处理失败: 0"),
-            "missing": tk.StringVar(value="发现缺失: 0")
+            "missing": tk.StringVar(value="发现缺失: 0"),
+            "valid_links": tk.StringVar(value="有效链接: 0"),
+            "invalid_links": tk.StringVar(value="无效链接: 0")
         }
         
         for key, var in self.stats_vars.items():
@@ -532,18 +597,22 @@ class ModelManagerGUI:
         result_frame.pack(fill=tk.BOTH, expand=True)
         
         # 列表视图
-        columns = ("model", "title", "url")
+        columns = ("model", "title", "url", "status", "source")
         self.result_tree = ttk.Treeview(result_frame, columns=columns, show="headings")
         
         # 设置列标题（初始为PORN模式）
         self.result_tree.heading("model", text="模特")
         self.result_tree.heading("title", text="视频标题")
         self.result_tree.heading("url", text="链接")
+        self.result_tree.heading("status", text="异常标识")
+        self.result_tree.heading("source", text="来源")
         
         # 设置列宽
-        self.result_tree.column("model", width=150)
-        self.result_tree.column("title", width=300)
-        self.result_tree.column("url", width=400)
+        self.result_tree.column("model", width=140)
+        self.result_tree.column("title", width=260)
+        self.result_tree.column("url", width=360)
+        self.result_tree.column("status", width=120)
+        self.result_tree.column("source", width=120)
         
         # 添加滚动条
         scrollbar = ttk.Scrollbar(result_frame, orient=tk.VERTICAL, command=self.result_tree.yview)
@@ -2014,6 +2083,8 @@ class ModelManagerGUI:
         # 更新状态
         self.status_var.set("运行中...")
         self.progress_var.set(0)
+        if hasattr(self, 'progress_percent_var'):
+            self.progress_percent_var.set("0%")
         
         # 清空日志
         self.log_text.delete(1.0, tk.END)
@@ -2184,6 +2255,11 @@ class ModelManagerGUI:
                         self.log_text.see(tk.END)
                     elif msg_type == "progress":
                         self.progress_var.set(msg)
+                        if hasattr(self, 'progress_percent_var'):
+                            try:
+                                self.progress_percent_var.set(f"{float(msg):.1f}%")
+                            except Exception:
+                                self.progress_percent_var.set(f"{msg}%")
                     elif msg_type == "results":
                         # 更新结果显示标签页
                         self.update_results_display(msg)
@@ -2194,6 +2270,8 @@ class ModelManagerGUI:
                             self.running = False
                             self.status_var.set("运行完成")
                             self.progress_var.set(100)
+                            if hasattr(self, 'progress_percent_var'):
+                                self.progress_percent_var.set("100%")
                             self.run_button.config(state=tk.NORMAL)
                             self.stop_button.config(state=tk.DISABLED)
                             # 只有在没有错误的情况下才显示成功消息
@@ -2561,11 +2639,23 @@ class ModelManagerGUI:
             processed_count = 0
             failed_count = 0
             missing_count = 0
+            valid_links_count = 0
+            invalid_links_count = 0
             
             # 处理结果数据
             for result in results:
                 if result.success:
                     processed_count += 1
+                    
+                    result_missing_count = getattr(result, 'missing_count', 0)
+                    result_valid_links = len(getattr(result, 'missing_with_urls', []) or [])
+                    result_invalid_links = max(result_missing_count - result_valid_links, 0)
+                    valid_links_count += result_valid_links
+                    invalid_links_count += result_invalid_links
+                    
+                    status_tag = "正常" if result_invalid_links == 0 else "⚠ 部分无链接"
+                    source_tag = "在线缺失"
+                    
                     # 添加缺失视频到列表
                     if hasattr(result, 'missing_with_urls') and result.missing_with_urls:
                         for title, url in result.missing_with_urls:
@@ -2576,7 +2666,10 @@ class ModelManagerGUI:
                             else:
                                 model_module = "PORN" if "javdb" not in str(model_info).lower() else "JAVDB"
                             
-                            self.result_tree.insert("", tk.END, values=(result.model_name, f"[{model_module}] {title}", url))
+                            self.result_tree.insert(
+                                "", tk.END,
+                                values=(result.model_name, f"[{model_module}] {title}", url, status_tag, source_tag)
+                            )
                             missing_count += 1
                 else:
                     failed_count += 1
@@ -2585,6 +2678,8 @@ class ModelManagerGUI:
             self.stats_vars["processed"].set(f"成功处理: {processed_count}")
             self.stats_vars["failed"].set(f"处理失败: {failed_count}")
             self.stats_vars["missing"].set(f"发现缺失: {missing_count}")
+            self.stats_vars["valid_links"].set(f"有效链接: {valid_links_count}")
+            self.stats_vars["invalid_links"].set(f"无效链接: {invalid_links_count}")
             
             # 切换到结果显示标签页
             self.notebook.select(self.result_tab)
@@ -2616,10 +2711,19 @@ class ModelManagerGUI:
                     f.write("-" * 80 + "\n")
                     
                     for item in self.result_tree.get_children():
-                        model, title, url = self.result_tree.item(item, "values")
+                        values = self.result_tree.item(item, "values")
+                        model = values[0] if len(values) > 0 else ""
+                        title = values[1] if len(values) > 1 else ""
+                        url = values[2] if len(values) > 2 else ""
+                        status = values[3] if len(values) > 3 else ""
+                        source = values[4] if len(values) > 4 else ""
                         f.write(f"模特: {model}\n")
                         f.write(f"标题: {title}\n")
                         f.write(f"链接: {url}\n")
+                        if status:
+                            f.write(f"异常标识: {status}\n")
+                        if source:
+                            f.write(f"来源: {source}\n")
                         f.write("-" * 80 + "\n")
                 
                 messagebox.showinfo("成功", f"结果已导出到: {file_path}")
@@ -4102,17 +4206,31 @@ if __name__ == "__main__":
         missing_count = 0
         processed_count = 0
         failed_count = 0
+        valid_links_count = 0
+        invalid_links_count = 0
         
         # 处理每个模特的结果
         for result in results:
             if result.success:
                 processed_count += 1
+                
+                result_missing_count = getattr(result, 'missing_count', 0)
+                result_valid_links = len(getattr(result, 'missing_with_urls', []) or [])
+                result_invalid_links = max(result_missing_count - result_valid_links, 0)
+                valid_links_count += result_valid_links
+                invalid_links_count += result_invalid_links
+                
+                status_tag = "正常" if result_invalid_links == 0 else "⚠ 部分无链接"
+                source_tag = "在线缺失"
+                
                 # 显示缺失视频
                 for title, url in result.missing_with_urls:
                     self.result_tree.insert("", tk.END, values=(
                         result.model_name,
                         title,
-                        url
+                        url,
+                        status_tag,
+                        source_tag
                     ))
                     missing_count += 1
             else:
@@ -4122,6 +4240,8 @@ if __name__ == "__main__":
         self.stats_vars["processed"].set(f"成功处理: {processed_count}")
         self.stats_vars["failed"].set(f"处理失败: {failed_count}")
         self.stats_vars["missing"].set(f"发现缺失: {missing_count}")
+        self.stats_vars["valid_links"].set(f"有效链接: {valid_links_count}")
+        self.stats_vars["invalid_links"].set(f"无效链接: {invalid_links_count}")
         
         # 切换到结果显示标签页
         self.notebook.select(self.result_tab)
