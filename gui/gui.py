@@ -1893,51 +1893,85 @@ class ModelManagerGUI:
                     # 发送结果数据到GUI
                     if results:
                         self.queue.put(("results", results))
+                    
+                    # 🚨 修复：只在成功时发送完成消息
+                    self.queue.put(("completed", "运行完成"))
+                    
+                except Exception as e:
+                    # 🚨 修复：异常时不发送完成消息，只发送错误消息
+                    self.queue.put(("error", str(e)))
+                    # 重新抛出异常以确保finally块正确执行
+                    raise
                 finally:
                     # 恢复原有日志处理器
                     original_logger.removeHandler(queue_handler)
                     for handler in original_handlers:
                         original_logger.addHandler(handler)
-                
-                # 发送完成消息
-                self.queue.put(("completed", "运行完成"))
             else:
                 raise Exception(f"无法找到核心模块: {core_py_path}")
         except Exception as e:
+            # 🚨 修复：顶层异常处理，不重复发送完成消息
+            if not self.queue.empty():
+                # 检查队列中是否已经有错误消息
+                try:
+                    # 尝试查看队列中的消息类型
+                    pass
+                except:
+                    pass
+            # 只发送错误消息
             self.queue.put(("error", str(e)))
-        finally:
-            # 确保线程结束后更新按钮状态
-            self.queue.put(("completed", "运行完成"))
     
     def check_queue(self):
         """检查队列，处理线程消息"""
         try:
+            # 🚨 修复：添加队列处理状态跟踪，防止重复处理
+            processed_messages = []
+            error_occurred = False
+            completion_processed = False
+            
             while not self.queue.empty():
-                msg_type, msg = self.queue.get_nowait()
-                
-                if msg_type == "status":
-                    self.status_var.set(msg)
-                elif msg_type == "log":
-                    self.log_text.insert(tk.END, msg + "\n")
-                    self.log_text.see(tk.END)
-                elif msg_type == "progress":
-                    self.progress_var.set(msg)
-                elif msg_type == "results":
-                    # 更新结果显示标签页
-                    self.update_results_display(msg)
-                elif msg_type == "completed":
-                    self.status_var.set("运行完成")
-                    self.progress_var.set(100)
-                    self.run_button.config(state=tk.NORMAL)
-                    self.stop_button.config(state=tk.DISABLED)
-                    messagebox.showinfo("成功", "查重脚本运行完成")
-                elif msg_type == "error":
-                    self.status_var.set("运行出错")
-                    self.run_button.config(state=tk.NORMAL)
-                    self.stop_button.config(state=tk.DISABLED)
-                    messagebox.showerror("错误", f"运行出错: {msg}")
-        except queue.Empty:
-            pass
+                try:
+                    msg_type, msg = self.queue.get_nowait()
+                    processed_messages.append((msg_type, msg))
+                    
+                    if msg_type == "status":
+                        self.status_var.set(msg)
+                    elif msg_type == "log":
+                        self.log_text.insert(tk.END, msg + "\n")
+                        self.log_text.see(tk.END)
+                    elif msg_type == "progress":
+                        self.progress_var.set(msg)
+                    elif msg_type == "results":
+                        # 更新结果显示标签页
+                        self.update_results_display(msg)
+                    elif msg_type == "completed":
+                        # 🚨 修复：只处理第一次完成消息
+                        if not completion_processed:
+                            completion_processed = True
+                            self.status_var.set("运行完成")
+                            self.progress_var.set(100)
+                            self.run_button.config(state=tk.NORMAL)
+                            self.stop_button.config(state=tk.DISABLED)
+                            # 只有在没有错误的情况下才显示成功消息
+                            if not error_occurred:
+                                messagebox.showinfo("成功", "查重脚本运行完成")
+                    elif msg_type == "error":
+                        # 🚨 修复：记录错误状态，阻止成功消息显示
+                        error_occurred = True
+                        self.status_var.set("运行出错")
+                        self.run_button.config(state=tk.NORMAL)
+                        self.stop_button.config(state=tk.DISABLED)
+                        messagebox.showerror("错误", f"运行出错: {msg}")
+                        
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    # 队列处理本身出错
+                    print(f"队列处理错误: {e}")
+                    break
+                    
+        except Exception as e:
+            print(f"检查队列时出错: {e}")
         
         # 继续轮询，不管是否正在运行，确保所有日志都能被处理
         self.root.after(100, self.check_queue)
