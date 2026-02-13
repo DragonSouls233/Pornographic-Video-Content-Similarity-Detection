@@ -233,9 +233,14 @@ class ModelManagerGUI:
         
         # 删除模特
         ttk.Button(action_frame, text="删除模特", command=self.delete_model, width=20).pack(fill=tk.X, pady=5)
+
+        # 黑名单功能
+        ttk.Label(action_frame, text="黑名单", font=("Arial", 10, "bold")).pack(pady=5)
+        ttk.Button(action_frame, text="设置专属URL并加入黑名单", command=self.add_blacklist_url_for_model, width=20).pack(fill=tk.X, pady=5)
         
         # 分隔线
         ttk.Separator(action_frame, orient='horizontal').pack(fill=tk.X, pady=10)
+
         
         # 下载功能
         ttk.Label(action_frame, text="下载功能", font=("Arial", 10, "bold")).pack(pady=5)
@@ -1598,8 +1603,101 @@ class ModelManagerGUI:
         dialog.transient(self.root)
         dialog.grab_set()
         self.root.wait_window(dialog)
+
+    def add_blacklist_url_for_model(self):
+        """为指定模特设置专属URL并加入黑名单"""
+        selected_items = self.model_tree.selection()
+        if not selected_items:
+            messagebox.showinfo("提示", "请选择要设置黑名单URL的模特")
+            return
+
+        item = selected_items[0]
+        values = self.model_tree.item(item, "values")
+        model_name = values[0]
+        module = values[1]
+        url = values[2]
+        if url == "(需要添加)":
+            url = ""
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("设置专属URL并加入黑名单")
+        dialog.geometry("520x260")
+        dialog.resizable(False, False)
+
+        dialog.update_idletasks()
+        x = (self.root.winfo_screenwidth() - dialog.winfo_width()) // 2
+        y = (self.root.winfo_screenheight() - dialog.winfo_height()) // 2
+        dialog.geometry(f"520x260+{x}+{y}")
+
+        frame = ttk.Frame(dialog, padding="20")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="模特名称: ").grid(row=0, column=0, sticky=tk.W, pady=10)
+        ttk.Label(frame, text=model_name).grid(row=0, column=1, sticky=tk.W, pady=10)
+
+        ttk.Label(frame, text="模块类型: ").grid(row=1, column=0, sticky=tk.W, pady=10)
+        module_var = tk.StringVar(value=module)
+        module_combobox = ttk.Combobox(frame, textvariable=module_var, values=["PORN", "JAVDB"], width=37, state="readonly")
+        module_combobox.grid(row=1, column=1, sticky=tk.W, pady=10)
+
+        ttk.Label(frame, text="专属链接: ").grid(row=2, column=0, sticky=tk.W, pady=10)
+        url_var = tk.StringVar(value=url)
+        ttk.Entry(frame, textvariable=url_var, width=40).grid(row=2, column=1, sticky=tk.W, pady=10)
+
+        ttk.Label(frame, text="原因(可选): ").grid(row=3, column=0, sticky=tk.W, pady=10)
+        reason_var = tk.StringVar()
+        ttk.Entry(frame, textvariable=reason_var, width=40).grid(row=3, column=1, sticky=tk.W, pady=10)
+
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+
+        def on_ok():
+            new_url = url_var.get().strip()
+            new_module = module_var.get()
+            reason = reason_var.get().strip()
+
+            if not new_url:
+                messagebox.showerror("错误", "链接不能为空")
+                return
+
+            if new_module == "JAVDB" and "javdb" not in new_url.lower():
+                if not messagebox.askyesno("警告", "选择的模块是JAVDB，但链接中不包含'javdb'。\n\n确定要继续吗？"):
+                    return
+            elif new_module == "PORN" and "javdb" in new_url.lower():
+                if not messagebox.askyesno("警告", "选择的模块是PORN，但链接中包含'javdb'。\n\n确定要继续吗？"):
+                    return
+
+            # 更新内存模型数据
+            self.models[model_name] = {
+                "module": new_module,
+                "url": new_url
+            }
+
+            # 写入黑名单并同步状态
+            try:
+                from core.modules.common.model_database import ModelDatabase
+                db = ModelDatabase('models.db')
+                db.add_blacklisted_url(new_url, name=model_name, reason=reason)
+                db.apply_blacklist_to_models()
+            except Exception as e:
+                self.logger.warning(f"黑名单写入失败: {e}")
+
+            if self.save_models():
+                self.update_model_list()
+                dialog.destroy()
+                messagebox.showinfo("成功", "已添加专属URL并加入黑名单，查重将自动跳过该URL")
+            else:
+                messagebox.showerror("错误", "保存失败，请重试")
+
+        ttk.Button(button_frame, text="确定", command=on_ok).pack(side=tk.LEFT, padx=10)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=10)
+
+        dialog.transient(self.root)
+        dialog.grab_set()
+        self.root.wait_window(dialog)
     
     def refresh_public_ip(self):
+
         """刷新公网IP"""
         try:
             import requests

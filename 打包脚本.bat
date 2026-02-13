@@ -169,6 +169,9 @@ if not exist "dist\BATCH_MODEL_MANAGEMENT.md" (
         echo      - BATCH_MODEL_MANAGEMENT.md 已复制
     )
 )
+REM 方案B：不打包数据库文件
+if exist "dist\models.db" del /f /q "dist\models.db"
+if exist "dist\models.db-journal" del /f /q "dist\models.db-journal"
 echo      完成!
 echo.
 

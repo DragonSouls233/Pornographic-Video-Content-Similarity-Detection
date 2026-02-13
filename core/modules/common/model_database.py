@@ -74,12 +74,27 @@ class ModelDatabase:
                     FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE
                 )
             ''')
+
+            # 旧版黑名单表（已存在于数据库中）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS blacklist (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    reason TEXT,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             
             # 创建索引优化查询性能
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_models_name ON models(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_models_module ON models(module)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_models_url ON models(url)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_videos_model_id ON videos(model_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_videos_title ON videos(title)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_blacklist_url ON blacklist(url)')
+
+
             
             conn.commit()
             conn.close()
@@ -137,11 +152,24 @@ class ModelDatabase:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+
+            # 如果URL在黑名单中，标记为invalid
+            status_to_use = 'active'
+            if url and self._is_url_blacklisted(url):
+                status_to_use = 'invalid'
+            else:
+                try:
+                    cursor.execute('SELECT status FROM models WHERE name = ?', (name,))
+                    existing = cursor.fetchone()
+                    if existing and existing[0]:
+                        status_to_use = existing[0]
+                except Exception:
+                    pass
             
             cursor.execute('''
-                INSERT OR REPLACE INTO models (name, url, module, country, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ''', (name, url, module, country))
+                INSERT OR REPLACE INTO models (name, url, module, country, status, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (name, url, module, country, status_to_use))
             
             # 如果是新插入，初始化统计数据
             if cursor.rowcount > 0:
@@ -160,6 +188,7 @@ class ModelDatabase:
         except Exception as e:
             self.logger.error(f"添加模特失败: {e}")
             return False
+
     
     def get_model(self, name: str) -> Optional[Dict]:
         """获取单个模特信息"""
@@ -190,13 +219,16 @@ class ModelDatabase:
     def load_models(self) -> Dict[str, str]:
         """加载所有模特，返回 {name: url} 格式的字典（兼容JSON接口）"""
         try:
-            models = self.get_all_models()
-            return {model['name']: model['url'] for model in models}
+            # 应用URL黑名单与状态过滤
+            self.apply_blacklist_to_models()
+            models = self.get_all_models(exclude_blacklisted=True)
+            return {model['name']: model['url'] for model in models if model.get('url')}
         except Exception as e:
             self.logger.error(f"加载模特数据失败: {e}")
             return {}
 
-    def get_all_models(self, module: str = None, status: str = None) -> List[Dict]:
+
+    def get_all_models(self, module: str = None, status: str = None, exclude_blacklisted: bool = False) -> List[Dict]:
         """获取所有模特信息"""
         try:
             conn = sqlite3.connect(self.db_path)
@@ -220,6 +252,12 @@ class ModelDatabase:
             if status:
                 conditions.append("m.status = ?")
                 params.append(status)
+            elif exclude_blacklisted:
+                conditions.append("m.status = 'active'")
+
+            if exclude_blacklisted:
+                conditions.append("m.url NOT IN (SELECT url FROM blacklist)")
+
             
             if conditions:
                 query += " WHERE " + " AND ".join(conditions)
@@ -235,6 +273,7 @@ class ModelDatabase:
         except Exception as e:
             self.logger.error(f"获取模特列表失败: {e}")
             return []
+
     
     def update_model_stats(self, model_name: str, local_count: int = None, 
                           online_count: int = None, missing_count: int = None):
@@ -329,7 +368,7 @@ class ModelDatabase:
             self.logger.error(f"删除模特失败: {e}")
             return False
     
-    def search_models(self, keyword: str, module: str = None) -> List[Dict]:
+    def search_models(self, keyword: str, module: str = None, exclude_blacklisted: bool = False) -> List[Dict]:
         """搜索模特"""
         try:
             conn = sqlite3.connect(self.db_path)
@@ -349,6 +388,10 @@ class ModelDatabase:
             if module:
                 query += " AND m.module = ?"
                 params.append(module)
+
+            if exclude_blacklisted:
+                query += " AND m.status = 'active' AND m.url NOT IN (SELECT url FROM blacklist)"
+
             
             query += " ORDER BY m.name"
             
@@ -361,6 +404,7 @@ class ModelDatabase:
         except Exception as e:
             self.logger.error(f"搜索模特失败: {e}")
             return []
+
     
     def get_statistics(self) -> Dict:
         """获取整体统计信息"""
@@ -387,6 +431,11 @@ class ModelDatabase:
                 GROUP BY status
             ''')
             status_stats = dict(cursor.fetchall())
+
+            # 黑名单统计
+            cursor.execute("SELECT COUNT(*) FROM blacklist")
+            blacklist_count = cursor.fetchone()[0]
+
             
             # 最近同步时间
             cursor.execute('''
@@ -401,12 +450,103 @@ class ModelDatabase:
                 'total_models': total_models,
                 'module_distribution': module_stats,
                 'status_distribution': status_stats,
+                'blacklist_count': blacklist_count,
                 'last_sync': last_sync
             }
             
         except Exception as e:
             self.logger.error(f"获取统计信息失败: {e}")
             return {}
+
+    def get_blacklisted_urls(self) -> List[str]:
+        """获取黑名单URL列表（旧表 blacklist）"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT url FROM blacklist')
+            rows = cursor.fetchall()
+            conn.close()
+            return [r[0] for r in rows]
+        except Exception as e:
+            self.logger.error(f"获取黑名单失败: {e}")
+            return []
+
+    def add_blacklisted_url(self, url: str, name: str = "", reason: str = "") -> bool:
+        """添加黑名单URL到旧表（自动去重）"""
+        if not url:
+            return False
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            # 去重：如果已存在同URL则忽略
+            cursor.execute('SELECT 1 FROM blacklist WHERE url = ?', (url,))
+            if cursor.fetchone():
+                conn.close()
+                return True
+            cursor.execute('''
+                INSERT INTO blacklist (name, url, reason, added_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (name or '', url, reason or ''))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            self.logger.error(f"添加黑名单失败: {e}")
+            return False
+
+    def apply_blacklist_to_models(self) -> int:
+        """将黑名单URL同步到模型状态，返回更新数量"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE models
+                SET status = 'invalid', updated_at = CURRENT_TIMESTAMP
+                WHERE url IN (SELECT url FROM blacklist)
+                  AND status != 'invalid'
+            ''')
+            affected = cursor.rowcount
+            conn.commit()
+            conn.close()
+            if affected:
+                self.logger.info(f"已标记 {affected} 条黑名单URL为 invalid")
+            return affected
+        except Exception as e:
+            self.logger.error(f"应用黑名单失败: {e}")
+            return 0
+
+    def get_duplicate_urls(self) -> List[Tuple[str, int]]:
+        """获取重复URL列表及其数量"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT url, COUNT(*) as cnt
+                FROM models
+                WHERE url IS NOT NULL AND TRIM(url) != ''
+                GROUP BY url
+                HAVING cnt > 1
+            ''')
+            rows = cursor.fetchall()
+            conn.close()
+            return rows
+        except Exception as e:
+            self.logger.error(f"获取重复URL失败: {e}")
+            return []
+
+    def _is_url_blacklisted(self, url: str) -> bool:
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT 1 FROM blacklist WHERE url = ?', (url,))
+            hit = cursor.fetchone()
+            conn.close()
+            return hit is not None
+        except Exception:
+            return False
+
+
+
 
 
 # 数据库适配器，兼容现有JSON接口

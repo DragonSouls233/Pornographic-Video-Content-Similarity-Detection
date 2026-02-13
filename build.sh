@@ -140,6 +140,9 @@ if [ ! -f "dist/requirements.txt" ] && [ -f "requirements.txt" ]; then
     cp requirements.txt dist/requirements.txt
     echo "     - requirements.txt 已复制"
 fi
+# 方案B：不打包数据库文件
+rm -f dist/models.db dist/models.db-journal
+
 echo "     完成!"
 echo ""
 
