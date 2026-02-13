@@ -212,8 +212,18 @@ class ModelProcessor:
             else:
                 module_name = "JAVDB" if 'javdb' in url.lower() else "PORN"
 
+            # 读取该模特的专属黑名单URL
+            blacklisted_urls = set()
+            try:
+                from core.modules.common.model_database import ModelDatabase
+                db = ModelDatabase('models.db')
+                blacklisted_urls = set(db.get_blacklisted_urls_by_model(model_name))
+            except Exception:
+                pass
+
             # 初始化查重缓存
             cache_ctrl = self.config.get('cache', {})
+
             cache_db_path = cache_ctrl.get('dup_cache_path', 'output/dup_cache.db')
             cache_store = DupCacheStore(cache_db_path)
             cache_key = cache_store.build_cache_key(model_name, module_name, url)
@@ -283,10 +293,17 @@ class ModelProcessor:
                 def _is_valid_url(url_value):
                     return isinstance(url_value, str) and url_value.strip().startswith(("http://", "https://"))
 
-                cached_missing_titles = set(cache_entry.missing_titles or [])
-                cached_missing_with_urls = [(t, u) for t, u in (cache_entry.missing_with_urls or []) if _is_valid_url(u)]
+                cached_missing_with_urls_raw = list(cache_entry.missing_with_urls or [])
+                blacklisted_titles = set()
+                if blacklisted_urls and cached_missing_with_urls_raw:
+                    blacklisted_titles = {t for t, u in cached_missing_with_urls_raw if u in blacklisted_urls}
+                    cached_missing_with_urls_raw = [(t, u) for t, u in cached_missing_with_urls_raw if u not in blacklisted_urls]
+
+                cached_missing_titles = set(cache_entry.missing_titles or []) - blacklisted_titles
+                cached_missing_with_urls = [(t, u) for t, u in cached_missing_with_urls_raw if _is_valid_url(u)]
                 cached_missing_with_urls_titles = set([t for t, _ in cached_missing_with_urls])
                 invalid_or_no_url_titles = cached_missing_titles - cached_missing_with_urls_titles
+
 
                 remaining_missing = (cached_missing_with_urls_titles - local_set_with_downloaded) | invalid_or_no_url_titles
 
@@ -417,9 +434,6 @@ class ModelProcessor:
             # 合并本地视频和已下载视频
             local_set_with_downloaded = local_set | downloaded_videos
             
-            # 对比找出缺失视频（用所有在线视频对比，不只是新增的）
-            missing = online_set - local_set_with_downloaded
-            
             # 补全缓存中的URL映射，避免增量模式下出现空链接
             resolved_title_to_url = dict(title_to_url)
             if self.smart_cache and self.smart_cache.enabled:
@@ -428,9 +442,25 @@ class ModelProcessor:
                         cached_url = self.smart_cache.get_video_url(model_name, title)
                         if cached_url:
                             resolved_title_to_url[title] = cached_url
+
+            # 过滤专属黑名单URL
+            if blacklisted_urls:
+                blacklisted_titles = {t for t, u in resolved_title_to_url.items() if u in blacklisted_urls}
+                if blacklisted_titles:
+                    online_set = online_set - blacklisted_titles
+                    for t in blacklisted_titles:
+                        resolved_title_to_url.pop(t, None)
+                    self.logger.info(f"[线程-{thread_id}] {model_name}: 专属黑名单已忽略 {len(blacklisted_titles)} 条URL")
+
+            # 重新计算新增视频（排除黑名单）
+            new_videos = online_set - cached_titles
+
+            # 对比找出缺失视频（用所有在线视频对比，不只是新增的）
+            missing = online_set - local_set_with_downloaded
             
             def _is_valid_url(url_value):
                 return isinstance(url_value, str) and url_value.strip().startswith(("http://", "https://"))
+
             
             # 过滤无连接的内容
             missing_with_urls = [

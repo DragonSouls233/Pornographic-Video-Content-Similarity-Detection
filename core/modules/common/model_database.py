@@ -471,6 +471,33 @@ class ModelDatabase:
             self.logger.error(f"获取黑名单失败: {e}")
             return []
 
+    def get_blacklisted_urls_by_model(self, model_name: str) -> List[str]:
+        """获取指定模特的黑名单URL列表"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT url FROM blacklist WHERE name = ?', (model_name,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [r[0] for r in rows]
+        except Exception as e:
+            self.logger.error(f"获取模特黑名单失败: {e}")
+            return []
+
+    def get_blacklist_records_by_model(self, model_name: str) -> List[Dict]:
+        """获取指定模特的黑名单明细"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT url, reason, added_at FROM blacklist WHERE name = ? ORDER BY added_at DESC', (model_name,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            self.logger.error(f"获取黑名单明细失败: {e}")
+            return []
+
     def add_blacklisted_url(self, url: str, name: str = "", reason: str = "") -> bool:
         """添加黑名单URL到旧表（自动去重）"""
         if not url:
@@ -479,7 +506,7 @@ class ModelDatabase:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             # 去重：如果已存在同URL则忽略
-            cursor.execute('SELECT 1 FROM blacklist WHERE url = ?', (url,))
+            cursor.execute('SELECT 1 FROM blacklist WHERE url = ? AND name = ?', (url, name or ''))
             if cursor.fetchone():
                 conn.close()
                 return True
@@ -492,6 +519,24 @@ class ModelDatabase:
             return True
         except Exception as e:
             self.logger.error(f"添加黑名单失败: {e}")
+            return False
+
+    def add_model_blacklist_url(self, model_name: str, url: str, reason: str = "") -> bool:
+        """添加模特专属黑名单URL"""
+        return self.add_blacklisted_url(url=url, name=model_name, reason=reason)
+
+    def remove_model_blacklist_url(self, model_name: str, url: str) -> bool:
+        """删除模特专属黑名单URL"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM blacklist WHERE name = ? AND url = ?', (model_name, url))
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            conn.close()
+            return deleted
+        except Exception as e:
+            self.logger.error(f"删除黑名单失败: {e}")
             return False
 
     def apply_blacklist_to_models(self) -> int:
@@ -544,6 +589,7 @@ class ModelDatabase:
             return hit is not None
         except Exception:
             return False
+
 
 
 
