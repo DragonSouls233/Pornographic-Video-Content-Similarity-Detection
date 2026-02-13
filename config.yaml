@@ -5,10 +5,19 @@ cache:
   database_path: output/cache.db
   enabled: true
   expiration_days: 7
+  dup_cache_path: output/dup_cache.db
+  dup_cache_expire_hours: 168
+  dup_cache_force_refresh: false
+  dup_cache_force_refresh_models: []
+  dup_cache_clear_models: []
+  dup_cache_url_check_enabled: true
+  dup_cache_url_check_timeout: 8
+  dup_cache_url_check_max: 0
   incremental_update: true
   max_size_mb: 1000
   page_expiry_hours: 24
   use_database: false
+
 comparison:
   case_sensitive: false
   ignore_list:

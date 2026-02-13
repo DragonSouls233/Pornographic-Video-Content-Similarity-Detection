@@ -33,6 +33,13 @@ from core.modules.common.common import (
     get_smart_cache
 )
 
+# 查重缓存模块
+from core.modules.common.dup_cache import DupCacheStore, DupCacheEntry, compute_remote_signature
+from core.modules.common.dup_cache_probe import probe_remote_signature, compute_local_signature_from_files, check_url_available, compute_remote_signature_from_titles
+
+
+
+
 # 导入配置验证模块
 from core.modules.common.config_validator import validate_config_file, print_validation_report
 
@@ -196,6 +203,145 @@ class ModelProcessor:
                     local_folder=original_dir,
                     local_folder_full=folder
                 )
+
+            # 计算模块类型（用于缓存键）
+            if self.module_type == 1 or (self.module_type == 3 and '[Channel]' in original_dir):
+                module_name = "PORN"
+            elif self.module_type == 2:
+                module_name = "JAVDB"
+            else:
+                module_name = "JAVDB" if 'javdb' in url.lower() else "PORN"
+
+            # 初始化查重缓存
+            cache_ctrl = self.config.get('cache', {})
+            cache_db_path = cache_ctrl.get('dup_cache_path', 'output/dup_cache.db')
+            cache_store = DupCacheStore(cache_db_path)
+            cache_key = cache_store.build_cache_key(model_name, module_name, url)
+            cache_entry = cache_store.get(cache_key)
+
+            # 缓存过期判定
+            expire_hours = cache_ctrl.get('dup_cache_expire_hours', None)
+            if expire_hours is None:
+                expire_days = cache_ctrl.get('expiration_days', 7)
+                expire_hours = expire_days * 24 if isinstance(expire_days, (int, float)) else 0
+            if cache_entry and expire_hours and expire_hours > 0 and cache_entry.checked_at:
+                try:
+                    checked_at = datetime.fromisoformat(cache_entry.checked_at)
+                    if (datetime.now() - checked_at).total_seconds() > expire_hours * 3600:
+                        self.logger.info(f"[线程-{thread_id}] {model_name}: 查重缓存已过期，执行完整查重")
+                        cache_entry = None
+                except Exception:
+                    pass
+
+            # 缓存管理：支持强制刷新/按模特清理
+            force_refresh = cache_ctrl.get('dup_cache_force_refresh', False)
+            force_refresh_models = cache_ctrl.get('dup_cache_force_refresh_models', []) or []
+            clear_models = cache_ctrl.get('dup_cache_clear_models', []) or []
+
+            if force_refresh or model_name in force_refresh_models or model_name in clear_models:
+                cache_store.clear(model_name)
+                cache_entry = None
+                self.logger.info(f"[线程-{thread_id}] {model_name}: 已清理查重缓存，执行完整查重")
+
+
+            # 轻量远端探测（用于判断远端是否变化）
+            remote_signature = ""
+            probe_titles = []
+            proxies = None
+            headers = None
+            try:
+                # 代理配置
+
+                proxy_cfg = self.config.get('network', {}).get('proxy', {})
+                if proxy_cfg.get('enabled'):
+                    ptype = proxy_cfg.get('type', 'socks5')
+                    host = proxy_cfg.get('host', '')
+                    port = proxy_cfg.get('port', '')
+                    if host and port:
+                        proxy_url = f"{ptype}://{host}:{port}"
+                        proxies = {"http": proxy_url, "https": proxy_url}
+
+                headers = self.config.get('network', {}).get('headers', None)
+                remote_signature, probe_titles = probe_remote_signature(url, headers=headers, proxies=proxies)
+            except Exception as e:
+                self.logger.warning(f"[线程-{thread_id}] {model_name}: 远端轻量探测失败，将回退完整抓取 ({e})")
+
+            # 如果缓存命中且远端未变化，则走快速路径
+            if cache_entry and remote_signature and cache_entry.remote_signature == remote_signature:
+                # 获取已下载的视频（用于判定补齐）
+                downloaded_videos = set()
+                if self.smart_cache and self.smart_cache.enabled:
+                    cache_data = self.smart_cache.load(model_name)
+                    missing_data = cache_data.get('missing_videos', {})
+                    for title, info in missing_data.items():
+                        if info.get('status') == 'downloaded':
+                            downloaded_videos.add(title)
+
+                local_set_with_downloaded = local_set | downloaded_videos
+
+                # 严格补齐判定：缺失标题必须有可用链接
+                def _is_valid_url(url_value):
+                    return isinstance(url_value, str) and url_value.strip().startswith(("http://", "https://"))
+
+                cached_missing_titles = set(cache_entry.missing_titles or [])
+                cached_missing_with_urls = [(t, u) for t, u in (cache_entry.missing_with_urls or []) if _is_valid_url(u)]
+                cached_missing_with_urls_titles = set([t for t, _ in cached_missing_with_urls])
+                invalid_or_no_url_titles = cached_missing_titles - cached_missing_with_urls_titles
+
+                remaining_missing = (cached_missing_with_urls_titles - local_set_with_downloaded) | invalid_or_no_url_titles
+
+                # 严格链接可用性校验：仅在“已补齐”时触发
+                url_check_enabled = cache_ctrl.get('dup_cache_url_check_enabled', True)
+                url_check_timeout = cache_ctrl.get('dup_cache_url_check_timeout', 8)
+                url_check_max = cache_ctrl.get('dup_cache_url_check_max', 0)
+                if url_check_enabled and not remaining_missing and cached_missing_with_urls:
+                    to_check = cached_missing_with_urls
+                    if isinstance(url_check_max, int) and url_check_max > 0:
+                        to_check = cached_missing_with_urls[:url_check_max]
+                    invalid_due_to_url = set()
+                    for title, video_url in to_check:
+                        if not check_url_available(video_url, headers=headers, proxies=proxies, timeout=url_check_timeout):
+                            invalid_due_to_url.add(title)
+                    if invalid_due_to_url:
+                        remaining_missing |= invalid_due_to_url
+                        invalid_or_no_url_titles |= invalid_due_to_url
+
+                missing_with_urls = [(t, u) for t, u in cached_missing_with_urls if t in remaining_missing]
+
+                effective_local_count = len(local_set_with_downloaded)
+                missing_titles_sorted = sorted(list(remaining_missing))
+
+                # 更新缓存（本地签名/缺失结果）
+                local_signature = compute_local_signature_from_files(folder, list(local_set))
+                cache_entry.local_changed = 1 if cache_entry.local_signature and cache_entry.local_signature != local_signature else 0
+                cache_entry.remote_changed = 0
+                cache_entry.local_signature = local_signature
+                cache_entry.local_count = effective_local_count
+                cache_entry.online_count = cache_entry.online_count or len(cached_missing_titles)
+                cache_entry.missing_titles = missing_titles_sorted
+                cache_entry.missing_with_urls = missing_with_urls
+                cache_entry.invalid_titles = sorted(list(invalid_or_no_url_titles))
+                if remote_signature:
+                    cache_entry.remote_signature = remote_signature
+                cache_store.upsert(cache_entry)
+
+
+                self._update_stats(True)
+                return ModelResult(
+                    model_name=model_name,
+                    success=True,
+                    local_count=effective_local_count,
+                    online_count=cache_entry.online_count,
+                    new_videos_count=0,
+                    missing_count=len(remaining_missing),
+                    missing_titles=missing_titles_sorted,
+                    missing_with_urls=missing_with_urls,
+                    url=url,
+                    local_folder=original_dir,
+                    local_folder_full=folder,
+                    country=country,
+                    source="cache"
+                )
             
             # 抓取在线视频标题（使用智能缓存）
             max_pages = self.config.get('max_pages', -1)
@@ -298,6 +444,36 @@ class ModelProcessor:
             effective_local_count = len(local_set_with_downloaded)
             
             self.logger.info(f"[线程-{thread_id}] {model_name}: 在线 {len(online_set)} | 新视频 {len(new_videos)} | 本地 {original_local_count} | 已下载{len(downloaded_videos)} | 有效本地 {effective_local_count} | 缺失 {len(missing)}")
+            
+            # 更新查重缓存（完整抓取后）
+            try:
+                remote_sig_full = compute_remote_signature(list(online_set), len(online_set))
+                remote_sig_probe_fallback = compute_remote_signature_from_titles(list(online_set))
+                remote_sig_probe = remote_signature or remote_sig_probe_fallback
+                local_sig = compute_local_signature_from_files(folder, list(local_set))
+                local_changed = 1 if cache_entry and cache_entry.local_signature and cache_entry.local_signature != local_sig else 0
+                remote_changed = 1 if cache_entry and cache_entry.remote_signature and remote_sig_probe and cache_entry.remote_signature != remote_sig_probe else 0
+                cache_entry = DupCacheEntry(
+                    cache_key=cache_key,
+                    model_name=model_name,
+                    module=module_name,
+                    url=url,
+                    remote_signature=remote_sig_probe,
+                    remote_signature_full=remote_sig_full,
+                    local_signature=local_sig,
+                    online_count=len(online_set),
+                    local_count=effective_local_count,
+                    missing_titles=sorted(list(missing)),
+                    missing_with_urls=missing_with_urls,
+                    invalid_titles=[t for t in sorted(online_set) if not _is_valid_url(resolved_title_to_url.get(t, ""))],
+                    local_changed=local_changed,
+                    remote_changed=remote_changed
+                )
+                cache_store.upsert(cache_entry)
+            except Exception as e:
+                self.logger.warning(f"[线程-{thread_id}] {model_name}: 缓存写入失败: {e}")
+
+
             
             self._update_stats(True)
             
