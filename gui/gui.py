@@ -88,6 +88,10 @@ class ModelManagerGUI:
         self.result_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.result_tab, text="结果显示")
         
+        # 创建查重日志标签页
+        self.log_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.log_tab, text="查重日志")
+        
         # 创建下载进度标签页
         self.download_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.download_tab, text="下载进度")
@@ -100,6 +104,7 @@ class ModelManagerGUI:
         self.init_model_tab()
         self.init_run_tab()
         self.init_result_tab()
+        self.init_log_tab()  # 查重日志标签页
         self.init_download_tab()  # 新添加
         self.init_browser_proxy_tab()
         
@@ -273,6 +278,13 @@ class ModelManagerGUI:
         frame = ttk.Frame(self.run_tab, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
         
+        # 顶部导航按钮区
+        nav_frame = ttk.Frame(frame)
+        nav_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Button(nav_frame, text="查看结果", command=lambda: self.notebook.select(self.result_tab)).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(nav_frame, text="查看日志", command=lambda: self.notebook.select(self.log_tab)).pack(side=tk.LEFT)
+        
         # 运行配置
         config_frame = ttk.LabelFrame(frame, text="运行配置", padding="10")
         config_frame.pack(fill=tk.X, pady=(0, 10))
@@ -424,41 +436,6 @@ class ModelManagerGUI:
                 "percent_var": percent_var
             })
         
-        # 可折叠日志面板（默认展开）
-        log_container = ttk.Frame(right_sidebar)
-        log_container.pack(fill=tk.BOTH, expand=True)
-        
-        log_header = ttk.Frame(log_container)
-        log_header.pack(fill=tk.X)
-        ttk.Label(log_header, text="查重日志").pack(side=tk.LEFT)
-        
-        self.log_panel_expanded = True
-        self.log_toggle_btn = ttk.Button(log_header, text="折叠")
-        self.log_toggle_btn.pack(side=tk.RIGHT, padx=(4, 0))
-        ttk.Button(log_header, text="清空", command=lambda: self.log_text.delete(1.0, tk.END)).pack(side=tk.RIGHT)
-        
-        self.log_panel_body = ttk.Frame(log_container)
-        self.log_panel_body.pack(fill=tk.BOTH, expand=True)
-        
-        self.log_text = tk.Text(self.log_panel_body, height=12, wrap=tk.WORD, font=("Consolas", 8))
-        self.log_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        
-        scrollbar = ttk.Scrollbar(self.log_panel_body, orient=tk.VERTICAL, command=self.log_text.yview)
-        self.log_text.configure(yscroll=scrollbar.set)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        def toggle_log_panel():
-            if self.log_panel_expanded:
-                self.log_panel_body.pack_forget()
-                self.log_toggle_btn.config(text="展开")
-                self.log_panel_expanded = False
-            else:
-                self.log_panel_body.pack(fill=tk.BOTH, expand=True)
-                self.log_toggle_btn.config(text="折叠")
-                self.log_panel_expanded = True
-        
-        self.log_toggle_btn.config(command=toggle_log_panel)
-        
         # 下载控制变量
         self.downloading = False
         self.download_cancelled = False
@@ -583,6 +560,13 @@ class ModelManagerGUI:
         frame = ttk.Frame(self.result_tab, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
         
+        # 顶部导航按钮区
+        nav_frame = ttk.Frame(frame)
+        nav_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Button(nav_frame, text="返回运行控制", command=lambda: self.notebook.select(self.run_tab)).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(nav_frame, text="查看日志", command=lambda: self.notebook.select(self.log_tab)).pack(side=tk.LEFT)
+        
         # 模块类型指示器
         indicator_frame = ttk.Frame(frame)
         indicator_frame.pack(fill=tk.X, pady=(0, 10))
@@ -673,6 +657,62 @@ class ModelManagerGUI:
         
         # 绑定模块选择变化事件来更新显示
         self.model_module_var.trace_add('write', self._update_result_display_for_module)
+    
+    def init_log_tab(self):
+        """初始化查重日志标签页"""
+        # 创建主容器
+        main_frame = ttk.Frame(self.log_tab, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 顶部导航按钮区
+        nav_frame = ttk.Frame(main_frame)
+        nav_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Button(nav_frame, text="返回运行控制", command=lambda: self.notebook.select(self.run_tab)).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(nav_frame, text="查看结果", command=lambda: self.notebook.select(self.result_tab)).pack(side=tk.LEFT)
+        
+        # 日志控制区
+        control_frame = ttk.Frame(main_frame)
+        control_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        ttk.Label(control_frame, text="查重日志", font=("SimHei", 12, "bold")).pack(side=tk.LEFT)
+        
+        self.log_expanded = True
+        self.log_expand_btn = ttk.Button(control_frame, text="折叠日志")
+        self.log_expand_btn.pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(control_frame, text="清空日志", command=self.clear_log).pack(side=tk.RIGHT)
+        
+        # 日志显示区
+        log_display_frame = ttk.Frame(main_frame)
+        log_display_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.log_display_text = tk.Text(log_display_frame, wrap=tk.WORD, font=("Consolas", 9))
+        self.log_display_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
+        
+        log_scrollbar = ttk.Scrollbar(log_display_frame, orient=tk.VERTICAL, command=self.log_display_text.yview)
+        self.log_display_text.configure(yscroll=log_scrollbar.set)
+        log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 保持log_text引用用于兼容（指向log_display_text）
+        self.log_text = self.log_display_text
+        
+        def toggle_log_display():
+            if self.log_expanded:
+                self.log_display_frame_content.pack_forget()
+                self.log_expand_btn.config(text="展开日志")
+                self.log_expanded = False
+            else:
+                self.log_display_frame_content.pack(fill=tk.BOTH, expand=True)
+                self.log_expand_btn.config(text="折叠日志")
+                self.log_expanded = True
+        
+        self.log_display_frame_content = log_display_frame
+        self.log_expand_btn.config(command=toggle_log_display)
+    
+    def clear_log(self):
+        """清空日志"""
+        self.log_display_text.delete(1.0, tk.END)
+        self.log_text.delete(1.0, tk.END)
     
     def _update_result_display_for_module(self, *args):
         """根据模块选择更新结果显示"""
@@ -2413,6 +2453,10 @@ class ModelManagerGUI:
                     if msg_type == "status":
                         self.status_var.set(msg)
                     elif msg_type == "log":
+                        # 同时显示在日志标签页和运行控制（兼容旧代码）
+                        if hasattr(self, 'log_display_text'):
+                            self.log_display_text.insert(tk.END, msg + "\n")
+                            self.log_display_text.see(tk.END)
                         self.log_text.insert(tk.END, msg + "\n")
                         self.log_text.see(tk.END)
                         
@@ -2876,9 +2920,6 @@ class ModelManagerGUI:
             self.stats_vars["missing"].set(f"发现缺失: {missing_count}")
             self.stats_vars["valid_links"].set(f"有效链接: {valid_links_count}")
             self.stats_vars["invalid_links"].set(f"无效链接: {invalid_links_count}")
-            
-            # 切换到结果显示标签页
-            self.notebook.select(self.result_tab)
             
         except Exception as e:
             messagebox.showerror("错误", f"更新结果显示失败: {e}")
@@ -3610,9 +3651,6 @@ class ModelManagerGUI:
             
             # 启动下载线程
             threading.Thread(target=download_worker, daemon=True).start()
-            
-            # 切换到运行控制标签页以便看到进度
-            self.notebook.select(self.run_tab)
             
         except ImportError as e:
             messagebox.showerror("错误", f"下载模块导入失败: {e}")
@@ -4438,9 +4476,6 @@ if __name__ == "__main__":
         self.stats_vars["missing"].set(f"发现缺失: {missing_count}")
         self.stats_vars["valid_links"].set(f"有效链接: {valid_links_count}")
         self.stats_vars["invalid_links"].set(f"无效链接: {invalid_links_count}")
-        
-        # 切换到结果显示标签页
-        self.notebook.select(self.result_tab)
         
         self.add_log(f"✅ 对比完成: 成功{processed_count} 失败{failed_count} 缺失{missing_count}")
     
