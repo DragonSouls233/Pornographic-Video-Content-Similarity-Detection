@@ -374,26 +374,33 @@ def extract_local_videos(folder: str, video_exts: Set[str],
     递归扫描子文件夹中的所有视频文件
     """
     videos = set()
-    
-    if not os.path.exists(folder):
-        return videos
-    
-    # 递归扫描所有子目录
-    for root_dir, _, files in os.walk(folder):
-        for file in files:
-            name, ext = os.path.splitext(file)
-            
-            if ext.lower() in video_exts:
-                cleaned = clean_filename(name, clean_patterns)
-                if cleaned:
-                    videos.add(cleaned)
-                else:
-                    # 如果清理后为空，使用原始名称
-                    cleaned_name = name.strip()
-                    cleaned_name = re.sub(r'[\[\]\(\)].*?[\[\]\(\)]', '', cleaned_name)
-                    videos.add(cleaned_name)
-    
+
+    # 支持多路径（自动模式合并路径使用 ; 分隔）
+    folders = [folder]
+    if folder and not os.path.exists(folder) and ';' in folder:
+        folders = [p.strip() for p in folder.split(';') if p.strip()]
+
+    for path in folders:
+        if not path or not os.path.exists(path):
+            continue
+
+        # 递归扫描所有子目录
+        for root_dir, _, files in os.walk(path):
+            for file in files:
+                name, ext = os.path.splitext(file)
+
+                if ext.lower() in video_exts:
+                    cleaned = clean_filename(name, clean_patterns)
+                    if cleaned:
+                        videos.add(cleaned)
+                    else:
+                        # 如果清理后为空，使用原始名称
+                        cleaned_name = name.strip()
+                        cleaned_name = re.sub(r'[\[\]\(\)].*?[\[\]\(\)]', '', cleaned_name)
+                        videos.add(cleaned_name)
+
     return videos
+
 
 def extract_local_folders(folder: str) -> Set[str]:
     """
@@ -401,23 +408,30 @@ def extract_local_folders(folder: str) -> Set[str]:
     递归扫描子文件夹，提取文件夹名称作为视频标题
     """
     folders = set()
-    
-    if not os.path.exists(folder):
-        return folders
-    
-    # 递归扫描所有子目录
-    for root_dir, subdirs, _ in os.walk(folder):
-        for subdir in subdirs:
-            # 清理文件夹名称
-            cleaned = subdir.strip()
-            # 移除日期前缀（如果有），如 [2026-01-27]
-            cleaned = re.sub(r'^\[\d{4}-\d{2}-\d{2}\]', '', cleaned)
-            # 移除多余的空格
-            cleaned = cleaned.strip()
-            if cleaned:
-                folders.add(cleaned)
-    
+
+    # 支持多路径（自动模式合并路径使用 ; 分隔）
+    folder_list = [folder]
+    if folder and not os.path.exists(folder) and ';' in folder:
+        folder_list = [p.strip() for p in folder.split(';') if p.strip()]
+
+    for path in folder_list:
+        if not path or not os.path.exists(path):
+            continue
+
+        # 递归扫描所有子目录
+        for root_dir, subdirs, _ in os.walk(path):
+            for subdir in subdirs:
+                # 清理文件夹名称
+                cleaned = subdir.strip()
+                # 移除日期前缀（如果有），如 [2026-01-27]
+                cleaned = re.sub(r'^\[\d{4}-\d{2}-\d{2}\]', '', cleaned)
+                # 移除多余的空格
+                cleaned = cleaned.strip()
+                if cleaned:
+                    folders.add(cleaned)
+
     return folders
+
 
 def test_proxy_connection(proxy_config: dict, timeout: int = 5, logger=None) -> bool:
     """

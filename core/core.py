@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import random
+import re
 import logging
 import traceback
 import threading
@@ -185,8 +186,25 @@ class ModelProcessor:
             else:
                 local_set = extract_local_folders(folder)
                 self.logger.info(f"[线程-{thread_id}] {model_name}: 本地文件夹 {len(local_set)} 个")
+
+            # 统一标题归一化（降低误判）
+            comparison_cfg = self.config.get('comparison', {})
+            def _normalize_title(title: str) -> str:
+                t = (title or '').strip()
+                if not t:
+                    return ''
+                if not comparison_cfg.get('case_sensitive', False):
+                    t = t.lower()
+                if comparison_cfg.get('strip_punctuation', True):
+                    t = re.sub(r'[\W_]+', '', t, flags=re.UNICODE)
+                t = re.sub(r'\s+', '', t)
+                return t
+
+            def _normalize_set(titles):
+                return {n for n in (_normalize_title(t) for t in titles) if n}
             
             # 获取模特URL
+
             models = load_models()
             url = models.get(model_name)
             if not url:
@@ -301,32 +319,35 @@ class ModelProcessor:
 
                 cached_missing_titles = set(cache_entry.missing_titles or []) - blacklisted_titles
                 cached_missing_with_urls = [(t, u) for t, u in cached_missing_with_urls_raw if _is_valid_url(u)]
-                cached_missing_with_urls_titles = set([t for t, _ in cached_missing_with_urls])
-                invalid_or_no_url_titles = cached_missing_titles - cached_missing_with_urls_titles
 
+                local_norm = _normalize_set(local_set_with_downloaded)
+                cached_missing_norm = {_normalize_title(t) for t in cached_missing_titles if _normalize_title(t)}
+                cached_missing_with_urls_norm = {_normalize_title(t) for t, _ in cached_missing_with_urls if _normalize_title(t)}
+                invalid_or_no_url_norm = cached_missing_norm - cached_missing_with_urls_norm
 
-                remaining_missing = (cached_missing_with_urls_titles - local_set_with_downloaded) | invalid_or_no_url_titles
+                remaining_missing_norm = (cached_missing_with_urls_norm - local_norm) | invalid_or_no_url_norm
 
                 # 严格链接可用性校验：仅在“已补齐”时触发
                 url_check_enabled = cache_ctrl.get('dup_cache_url_check_enabled', True)
                 url_check_timeout = cache_ctrl.get('dup_cache_url_check_timeout', 8)
                 url_check_max = cache_ctrl.get('dup_cache_url_check_max', 0)
-                if url_check_enabled and not remaining_missing and cached_missing_with_urls:
+                if url_check_enabled and not remaining_missing_norm and cached_missing_with_urls:
                     to_check = cached_missing_with_urls
                     if isinstance(url_check_max, int) and url_check_max > 0:
                         to_check = cached_missing_with_urls[:url_check_max]
                     invalid_due_to_url = set()
                     for title, video_url in to_check:
                         if not check_url_available(video_url, headers=headers, proxies=proxies, timeout=url_check_timeout):
-                            invalid_due_to_url.add(title)
+                            invalid_due_to_url.add(_normalize_title(title))
                     if invalid_due_to_url:
-                        remaining_missing |= invalid_due_to_url
-                        invalid_or_no_url_titles |= invalid_due_to_url
+                        remaining_missing_norm |= invalid_due_to_url
+                        invalid_or_no_url_norm |= invalid_due_to_url
 
-                missing_with_urls = [(t, u) for t, u in cached_missing_with_urls if t in remaining_missing]
+                missing_with_urls = [(t, u) for t, u in cached_missing_with_urls if _normalize_title(t) in remaining_missing_norm]
 
                 effective_local_count = len(local_set_with_downloaded)
-                missing_titles_sorted = sorted(list(remaining_missing))
+                missing_titles_sorted = sorted([t for t in cached_missing_titles if _normalize_title(t) in remaining_missing_norm])
+
 
                 # 更新缓存（本地签名/缺失结果）
                 local_signature = compute_local_signature_from_files(folder, list(local_set))
@@ -337,7 +358,9 @@ class ModelProcessor:
                 cache_entry.online_count = cache_entry.online_count or len(cached_missing_titles)
                 cache_entry.missing_titles = missing_titles_sorted
                 cache_entry.missing_with_urls = missing_with_urls
-                cache_entry.invalid_titles = sorted(list(invalid_or_no_url_titles))
+                invalid_titles_sorted = sorted([t for t in cached_missing_titles if _normalize_title(t) in invalid_or_no_url_norm])
+                cache_entry.invalid_titles = invalid_titles_sorted
+
                 if remote_signature:
                     cache_entry.remote_signature = remote_signature
                 cache_store.upsert(cache_entry)
@@ -350,9 +373,10 @@ class ModelProcessor:
                     local_count=effective_local_count,
                     online_count=cache_entry.online_count,
                     new_videos_count=0,
-                    missing_count=len(remaining_missing),
+                    missing_count=len(missing_titles_sorted),
                     missing_titles=missing_titles_sorted,
                     missing_with_urls=missing_with_urls,
+
                     url=url,
                     local_folder=original_dir,
                     local_folder_full=folder,
@@ -417,8 +441,8 @@ class ModelProcessor:
                 )
             
             # 获取已缓存的标题
-            cached_titles = self.smart_cache.get_cached_titles(model_name)
-            new_videos = online_set - cached_titles
+            cached_titles = self.smart_cache.get_cached_titles(model_name) if self.smart_cache else set()
+            cached_norm = _normalize_set(cached_titles)
             
             # 获取之前已下载的视频（从缓存中标记为downloaded的视频）
             # 这样后续运行时，已下载的视频不会再出现在缺失列表中
@@ -433,6 +457,7 @@ class ModelProcessor:
             
             # 合并本地视频和已下载视频
             local_set_with_downloaded = local_set | downloaded_videos
+            local_norm = _normalize_set(local_set_with_downloaded)
             
             # 补全缓存中的URL映射，避免增量模式下出现空链接
             resolved_title_to_url = dict(title_to_url)
@@ -452,11 +477,16 @@ class ModelProcessor:
                         resolved_title_to_url.pop(t, None)
                     self.logger.info(f"[线程-{thread_id}] {model_name}: 专属黑名单已忽略 {len(blacklisted_titles)} 条URL")
 
-            # 重新计算新增视频（排除黑名单）
-            new_videos = online_set - cached_titles
+            online_norm = _normalize_set(online_set)
 
-            # 对比找出缺失视频（用所有在线视频对比，不只是新增的）
-            missing = online_set - local_set_with_downloaded
+            # 重新计算新增视频（排除黑名单，使用归一化）
+            new_norm = online_norm - cached_norm
+            new_videos = {t for t in online_set if _normalize_title(t) in new_norm}
+
+            # 对比找出缺失视频（使用归一化）
+            missing_norm = online_norm - local_norm
+            missing_titles = [t for t in online_set if _normalize_title(t) in missing_norm]
+            missing = set(missing_titles)
             
             def _is_valid_url(url_value):
                 return isinstance(url_value, str) and url_value.strip().startswith(("http://", "https://"))
@@ -465,9 +495,10 @@ class ModelProcessor:
             # 过滤无连接的内容
             missing_with_urls = [
                 (title, resolved_title_to_url.get(title, ""))
-                for title in missing
+                for title in missing_titles
                 if _is_valid_url(resolved_title_to_url.get(title, ""))
             ]
+
             
             # 记录原始本地数量和实际用于对比的数量
             original_local_count = len(local_set)

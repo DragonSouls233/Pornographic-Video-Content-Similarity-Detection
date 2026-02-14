@@ -7,7 +7,54 @@ from typing import Set, Dict, List, Tuple
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+
+def _is_javdb_video_belong_to_model(container, model_name: str, model_url: str, logger) -> bool:
+    """验证JAVDB视频是否属于指定模特（演员页严格过滤）"""
+    try:
+        if not model_name or not model_url:
+            return True
+        if '/actor' not in model_url and '/actors/' not in model_url:
+            return True
+
+        def _norm(s: str) -> str:
+            return (s or "").lower().strip()
+
+        def _norm_compact(s: str) -> str:
+            return _norm(s).replace(' ', '').replace('_', '').replace('-', '')
+
+        m = re.search(r"/actors?/([^/?#]+)/?", model_url)
+        target_slug = _norm(m.group(1)) if m else ""
+        target_compact = _norm_compact(model_name)
+
+        # 证据1：容器内出现指向该演员的链接
+        actor_links = []
+        for a in container.find_all('a', href=True):
+            href = a.get('href', '')
+            if '/actor' in href or '/actors/' in href:
+                actor_links.append(href)
+        if actor_links:
+            if target_slug and any(target_slug in _norm(l) for l in actor_links):
+                return True
+            if target_compact and any(target_compact in _norm_compact(l) for l in actor_links):
+                return True
+            return False
+
+        # 证据2：容器内有演员姓名文本
+        indicators = container.select('.actor, .actors, .cast, .actor-name, .actor-name a, .cast a, .actors a')
+        if indicators:
+            for indicator in indicators:
+                t = indicator.get_text(strip=True)
+                if t and (target_compact in _norm_compact(t) or _norm_compact(t) in target_compact):
+                    return True
+            return False
+
+        return False
+    except Exception as e:
+        logger.debug(f"  JAVDB - 演员归属校验异常: {e}")
+        return True
+
 # --- JAVDB特定功能 ---
+
 def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dict = None,
                               smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
     """JAVDB专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页（支持增量更新）"""
@@ -100,6 +147,9 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
             for elem in soup.select('a.video-title, .movie-title a, .film-title a'):
                 title = elem.get_text(strip=True)
                 if title and len(title) > 3:
+                    container = elem.find_parent(['div', 'article', 'li']) or elem
+                    if not _is_javdb_video_belong_to_model(container, model_name, url, logger):
+                        continue
                     cleaned_title = clean_javdb_title(title, config.get('filename_clean_patterns', []))
                     page_titles.add(cleaned_title)
                     video_url = elem.get('href')
@@ -114,6 +164,9 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
                 for elem in soup.select('.title, .video-title, h3.title'):
                     title = elem.get_text(strip=True)
                     if title and len(title) > 3:
+                        container = elem.find_parent(['div', 'article', 'li']) or elem
+                        if not _is_javdb_video_belong_to_model(container, model_name, url, logger):
+                            continue
                         cleaned_title = clean_javdb_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
                         link_elem = elem.find_parent('a')
@@ -124,6 +177,7 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
                                     video_url = urljoin(url, video_url)
                                 title_to_url[cleaned_title] = video_url
                                 page_videos.append((cleaned_title, video_url))
+
             
             if page_titles:
                 prev_count = len(all_titles)
@@ -269,6 +323,9 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                 for elem in soup.select('a.video-title, .movie-title a, .film-title a'):
                     title = elem.get_text(strip=True)
                     if title and len(title) > 3:
+                        container = elem.find_parent(['div', 'article', 'li']) or elem
+                        if not _is_javdb_video_belong_to_model(container, model_name, url, logger):
+                            continue
                         # 对在线标题应用清理流程
                         cleaned_title = clean_javdb_title(title, config.get('filename_clean_patterns', []))
                         page_titles.add(cleaned_title)
@@ -284,6 +341,9 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                     for elem in soup.select('.title, .video-title, h3.title'):
                         title = elem.get_text(strip=True)
                         if title and len(title) > 3:
+                            container = elem.find_parent(['div', 'article', 'li']) or elem
+                            if not _is_javdb_video_belong_to_model(container, model_name, url, logger):
+                                continue
                             cleaned_title = clean_javdb_title(title, config.get('filename_clean_patterns', []))
                             page_titles.add(cleaned_title)
                             # 尝试找到父链接
@@ -295,6 +355,7 @@ def fetch_with_requests_only_javdb(url: str, logger, max_pages: int = -1, config
                                         video_url = urljoin(url, video_url)
                                     title_to_url[cleaned_title] = video_url
                                     page_videos.append((cleaned_title, video_url))
+
                 
                 if page_titles:
                     prev_count = len(all_titles)
