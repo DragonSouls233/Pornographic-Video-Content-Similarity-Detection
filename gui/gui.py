@@ -599,9 +599,19 @@ class ModelManagerGUI:
         result_frame = ttk.LabelFrame(frame, text="内容列表", padding="10")
         result_frame.pack(fill=tk.BOTH, expand=True)
         
+        # 列表工具栏
+        selection_frame = ttk.Frame(result_frame)
+        selection_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        self.result_selection_var = tk.StringVar(value="已选 0 条")
+        ttk.Button(selection_frame, text="全选", command=self.select_all_results).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(selection_frame, text="清空选择", command=self.clear_result_selection).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(selection_frame, text="复制所选链接", command=self.copy_selected_result_urls).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(selection_frame, textvariable=self.result_selection_var, foreground="blue").pack(side=tk.RIGHT)
+        
         # 列表视图
         columns = ("model", "title", "url", "status", "source")
-        self.result_tree = ttk.Treeview(result_frame, columns=columns, show="headings")
+        self.result_tree = ttk.Treeview(result_frame, columns=columns, show="headings", selectmode="extended")
         
         # 设置列标题（初始为PORN模式）
         self.result_tree.heading("model", text="模特")
@@ -627,10 +637,14 @@ class ModelManagerGUI:
         # 绑定右键菜单到结果树
         self.result_tree.bind("<Button-3>", self.show_result_context_menu)  # Windows/Linux
         self.result_tree.bind("<Button-2>", self.show_result_context_menu)  # macOS
+        self.result_tree.bind("<<TreeviewSelect>>", self._update_result_selection_status)
+        self.result_tree.bind("<Control-a>", self._select_all_results_shortcut)
+        self.result_tree.bind("<Control-c>", self._copy_selected_results_shortcut)
         
         # 操作按钮
         action_frame = ttk.Frame(result_frame)
         action_frame.pack(fill=tk.X, pady=(10, 0))
+
         
         # PORN专用按钮
         self.porn_button_frame = ttk.Frame(action_frame)
@@ -2921,8 +2935,10 @@ class ModelManagerGUI:
             self.stats_vars["valid_links"].set(f"有效链接: {valid_links_count}")
             self.stats_vars["invalid_links"].set(f"无效链接: {invalid_links_count}")
             
+            self._update_result_selection_status()
         except Exception as e:
             messagebox.showerror("错误", f"更新结果显示失败: {e}")
+
     
     def export_results(self):
         """导出结果"""
@@ -3964,11 +3980,11 @@ class ModelManagerGUI:
     def show_result_context_menu(self, event):
         """显示结果列表的右键上下文菜单"""
         try:
-            # 选中被右键点击的项目
+            # 选中被右键点击的项目（不覆盖已有多选）
             item = self.result_tree.identify_row(event.y)
-            if item:
+            if item and item not in self.result_tree.selection():
                 self.result_tree.selection_set(item)
-                
+            
             # 创建上下文菜单
             context_menu = tk.Menu(self.root, tearoff=0)
             
@@ -3997,12 +4013,17 @@ class ModelManagerGUI:
                                                command=lambda: self.download_model_from_result(model_name, model_url))
                     
                     if video_url:
-                        context_menu.add_command(label="复制视频链接", 
-                                               command=lambda: self.copy_to_clipboard(video_url))
+                        context_menu.add_command(label="复制所选链接", 
+                                               command=self.copy_selected_result_urls)
                         context_menu.add_command(label="在浏览器中打开", 
                                                command=lambda: self.open_url_in_browser(video_url))
                     
                     context_menu.add_separator()
+            
+            # 选择操作
+            context_menu.add_command(label="全选", command=self.select_all_results)
+            context_menu.add_command(label="清空选择", command=self.clear_result_selection)
+            context_menu.add_separator()
             
             # 添加刷新和导出选项
             context_menu.add_command(label="刷新模特列表", command=self.refresh_models)
@@ -4015,6 +4036,7 @@ class ModelManagerGUI:
                 context_menu.grab_release()
         except Exception as e:
             print(f"显示右键菜单失败: {e}")
+
     
     def focus_on_model(self, model_name):
         """在模特管理标签页中定位到指定模特"""
@@ -4062,15 +4084,75 @@ class ModelManagerGUI:
         except Exception as e:
             messagebox.showerror("错误", f"从结果下载模特失败: {e}")
     
-    def copy_to_clipboard(self, text):
+    def _update_result_selection_status(self, event=None):
+        """更新结果选择状态显示"""
+        if not hasattr(self, 'result_tree'):
+            return
+        if hasattr(self, 'result_selection_var'):
+            count = len(self.result_tree.selection())
+            self.result_selection_var.set(f"已选 {count} 条")
+    
+    def select_all_results(self):
+        """全选结果列表"""
+        items = self.result_tree.get_children()
+        if items:
+            self.result_tree.selection_set(items)
+        self._update_result_selection_status()
+    
+    def clear_result_selection(self):
+        """清空结果选择"""
+        for item in self.result_tree.selection():
+            self.result_tree.selection_remove(item)
+        self._update_result_selection_status()
+    
+    def _get_selected_result_urls(self):
+        """获取选中的结果链接"""
+        urls = []
+        for item in self.result_tree.selection():
+            values = self.result_tree.item(item, "values")
+            url = values[2] if len(values) > 2 else ""
+            if url:
+                urls.append(url)
+        
+        # 去重并保留顺序
+        seen = set()
+        unique_urls = []
+        for url in urls:
+            if url not in seen:
+                seen.add(url)
+                unique_urls.append(url)
+        return unique_urls
+    
+    def copy_selected_result_urls(self):
+        """复制选中结果链接"""
+        urls = self._get_selected_result_urls()
+        if not urls:
+            messagebox.showwarning("提示", "请先选择需要复制的链接")
+            return
+        
+        text = "\r\n".join(urls)
+        self.copy_to_clipboard(text, f"已复制 {len(urls)} 条链接")
+    
+    def _select_all_results_shortcut(self, event=None):
+        """快捷键全选结果"""
+        self.select_all_results()
+        return "break"
+    
+    def _copy_selected_results_shortcut(self, event=None):
+        """快捷键复制选中链接"""
+        self.copy_selected_result_urls()
+        return "break"
+    
+    def copy_to_clipboard(self, text, tip="已复制到剪贴板"):
         """复制文本到剪贴板"""
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append(text)
             self.root.update()  # 确保内容被复制
-            messagebox.showinfo("提示", "已复制到剪贴板")
+            messagebox.showinfo("提示", tip)
         except Exception as e:
             messagebox.showerror("错误", f"复制到剪贴板失败: {e}")
+
     
     def open_url_in_browser(self, url):
         """在浏览器中打开URL"""
