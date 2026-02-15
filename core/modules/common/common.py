@@ -72,6 +72,7 @@ def setup_logging(log_dir: str, config_name: str = "main"):
     # 创建专门记录缺失视频的日志器
     missing_logger = logging.getLogger('missing_logger')
     missing_logger.setLevel(logging.INFO)
+    missing_logger.propagate = False
     
     # 避免重复添加处理器
     if not missing_logger.handlers:
@@ -80,6 +81,7 @@ def setup_logging(log_dir: str, config_name: str = "main"):
         missing_logger.addHandler(missing_handler)
     
     return logger, missing_logger, countries_dir
+
 
 # --- 配置加载 ---
 def load_config(config_path: str = "config.yaml") -> dict:
