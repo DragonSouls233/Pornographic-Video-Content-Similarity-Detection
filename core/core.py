@@ -112,14 +112,41 @@ class ModelProcessor:
         self.db = db if db else ModelDatabase()
         self.running_flag = running_flag
 
-        
         # 线程本地存储，每个线程有自己的 Selenium 实例
         self._thread_local = threading.local()
-        
+
         # 统计信息
         self.processed_count = 0
         self.error_count = 0
         self._stats_lock = threading.Lock()
+
+    def _get_selenium_instance(self) -> Optional['SeleniumHelper']:
+        """获取当前线程的 Selenium 实例（线程安全，复用实例）"""
+        # 检查当前线程是否已有 Selenium 实例
+        if hasattr(self._thread_local, 'selenium_instance'):
+            return self._thread_local.selenium_instance
+
+        # 创建新的 Selenium 实例
+        try:
+            from core.modules.common.selenium_helper import SeleniumHelper
+            selenium = SeleniumHelper(self.config)
+            selenium.driver = selenium.setup_driver()
+            self._thread_local.selenium_instance = selenium
+            self.logger.debug(f"为新线程创建 Selenium 实例")
+            return selenium
+        except Exception as e:
+            self.logger.error(f"创建 Selenium 实例失败: {e}")
+            return None
+
+    def _cleanup_selenium_instance(self):
+        """清理当前线程的 Selenium 实例"""
+        if hasattr(self._thread_local, 'selenium_instance') and self._thread_local.selenium_instance:
+            try:
+                self._thread_local.selenium_instance.close()
+                delattr(self._thread_local, 'selenium_instance')
+                self.logger.debug(f"清理 Selenium 实例")
+            except Exception as e:
+                self.logger.error(f"清理 Selenium 实例失败: {e}")
     
     def _should_stop(self) -> bool:
         """检查是否应该停止处理"""
@@ -404,16 +431,19 @@ class ModelProcessor:
                     )
                 
                 try:
-                    # 根据模块类型选择抓取函数，传入智能缓存
+                    # 获取当前线程的 Selenium 实例（如果使用 Selenium）
+                    selenium = self._get_selenium_instance() if (self.config.get('use_selenium', False) or self.config.get('scraper', '') == 'selenium') else None
+
+                    # 根据模块类型选择抓取函数，传入智能缓存和 Selenium 实例
                     if self.module_type == 1 or (self.module_type == 3 and '[Channel]' in original_dir):
                         online_set, title_to_url = fetch_with_requests_porn(
                             url, self.logger, max_pages, self.config,
-                            self.smart_cache, model_name
+                            self.smart_cache, model_name, selenium
                         )
                     else:
                         online_set, title_to_url = fetch_with_requests_javdb(
                             url, self.logger, max_pages, self.config,
-                            self.smart_cache, model_name
+                            self.smart_cache, model_name, selenium
                         )
                     
                     if online_set:

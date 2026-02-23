@@ -56,18 +56,18 @@ def _is_javdb_video_belong_to_model(container, model_name: str, model_url: str, 
 # --- JAVDB特定功能 ---
 
 def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dict = None,
-                              smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
+                              smart_cache=None, model_name: str = None, selenium=None) -> Tuple[Set[str], Dict[str, str]]:
     """JAVDB专用的抓取，支持requests和Selenium，抓取视频标题和链接，支持翻页（支持增量更新）"""
     if config is None:
         config = {}
-    
+
     # 检查是否使用 Selenium
     use_selenium = config.get('use_selenium', False)
     scraper = config.get('scraper', 'selenium')
-    
+
     if use_selenium or scraper == 'selenium':
         try:
-            return fetch_with_selenium_javdb(url, logger, max_pages, config, smart_cache, model_name)
+            return fetch_with_selenium_javdb(url, logger, max_pages, config, smart_cache, model_name, selenium)
         except Exception as e:
             logger.warning(f"  JAVDB - Selenium 抓取失败，回退到 requests: {e}")
             # 回退到 requests
@@ -77,17 +77,28 @@ def fetch_with_requests_javdb(url: str, logger, max_pages: int = -1, config: dic
 
 
 def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dict = None,
-                              smart_cache=None, model_name: str = None) -> Tuple[Set[str], Dict[str, str]]:
+                              smart_cache=None, model_name: str = None, selenium=None) -> Tuple[Set[str], Dict[str, str]]:
     """使用 Selenium 抓取 JAVDB 视频（支持增量更新）"""
     try:
         from ..common.selenium_helper import SeleniumHelper
     except ImportError:
         logger.error("  JAVDB - Selenium 助手模块未找到")
         raise
-    
+
+    # 如果没有提供 Selenium 实例，创建新的
+    need_cleanup = False
+    if selenium is None:
+        try:
+            selenium = SeleniumHelper(config)
+            selenium.driver = selenium.setup_driver()
+            need_cleanup = True
+        except Exception as e:
+            logger.error(f"  JAVDB - 创建 Selenium 实例失败: {e}")
+            raise
+
     all_titles = set()
     title_to_url = {}
-    
+
     # 确定抓取范围（支持增量更新）
     start_page = 1
     if smart_cache and model_name:
@@ -97,16 +108,11 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
             cached_titles = smart_cache.get_cached_titles(model_name)
             all_titles.update(cached_titles)
             logger.info(f"  JAVDB - 增量模式，已加载 {len(cached_titles)} 个缓存标题")
-    
+
     page_num = start_page
     consecutive_empty_pages = 0
-    
-    selenium = None
+
     try:
-        # 创建 Selenium 助手
-        selenium = SeleniumHelper(config)
-        selenium.driver = selenium.setup_driver()
-        
         logger.info("  JAVDB - 使用 Selenium 模式抓取")
         
         while True:
@@ -232,9 +238,13 @@ def fetch_with_selenium_javdb(url: str, logger, max_pages: int = -1, config: dic
         logger.error(f"  JAVDB - Selenium 抓取失败: {e}")
         raise
     finally:
-        if selenium:
-            selenium.close()
-    
+        # 只清理自己创建的 Selenium 实例
+        if need_cleanup and selenium:
+            try:
+                selenium.close()
+            except Exception as e:
+                logger.warning(f"  JAVDB - 清理 Selenium 实例失败: {e}")
+
     logger.info(f"  JAVDB - Selenium 总共提取到 {len(all_titles)} 个视频标题")
     return all_titles, title_to_url
 
