@@ -57,14 +57,17 @@ def setup_logging(log_dir: str, config_name: str = "main"):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     
-    # 避免重复添加处理器
-    if not logger.handlers:
-        # 添加文件处理器
+    # 避免重复添加处理器 (更健壮的检查)
+    existing_handlers = [type(h) for h in logger.handlers]
+    
+    # 添加文件处理器
+    if logging.FileHandler not in existing_handlers:
         file_handler = logging.FileHandler(main_log_file, encoding='utf-8')
         file_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
         logger.addHandler(file_handler)
-        
-        # 添加控制台处理器
+    
+    # 添加控制台处理器 (仅在非GUI环境下或强制要求时)
+    if logging.StreamHandler not in existing_handlers:
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s', '%Y-%m-%d %H:%M:%S'))
         logger.addHandler(stream_handler)
@@ -74,11 +77,12 @@ def setup_logging(log_dir: str, config_name: str = "main"):
     missing_logger.setLevel(logging.INFO)
     missing_logger.propagate = False
     
-    # 避免重复添加处理器
+    # 避免重复添加缺失视频处理器
     if not missing_logger.handlers:
         missing_handler = logging.FileHandler(missing_log_file, encoding='utf-8')
         missing_handler.setFormatter(logging.Formatter('%(asctime)s | %(message)s'))
         missing_logger.addHandler(missing_handler)
+
     
     return logger, missing_logger, countries_dir
 

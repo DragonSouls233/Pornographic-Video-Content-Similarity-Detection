@@ -51,6 +51,8 @@ from core.modules.common.chrome_driver_manager import check_and_setup_chromedriv
 from core.modules.common.enhanced_proxy_checker import EnhancedProxyTester, print_comprehensive_report
 
 from core.modules.common.smart_cache import SmartCache
+from core.modules.common.model_database import ModelDatabase
+
 
 from core.modules.porn.porn import (
     fetch_with_requests_porn,
@@ -87,7 +89,7 @@ class ModelProcessor:
     
     def __init__(self, config: dict, module_type: int, logger: logging.Logger, 
                  missing_logger: logging.Logger, countries_dir: str, 
-                 smart_cache: SmartCache, running_flag=None):
+                 smart_cache: SmartCache, db: ModelDatabase = None, running_flag=None):
         """
         初始化模特处理器
         
@@ -98,6 +100,7 @@ class ModelProcessor:
             missing_logger: 缺失视频日志记录器
             countries_dir: 国家分类目录
             smart_cache: 智能缓存实例
+            db: 数据库实例
             running_flag: 运行标志
         """
         self.config = config
@@ -106,7 +109,9 @@ class ModelProcessor:
         self.missing_logger = missing_logger
         self.countries_dir = countries_dir
         self.smart_cache = smart_cache
+        self.db = db if db else ModelDatabase()
         self.running_flag = running_flag
+
         
         # 线程本地存储，每个线程有自己的 Selenium 实例
         self._thread_local = threading.local()
@@ -148,14 +153,13 @@ class ModelProcessor:
         # 国家信息：优先使用数据库中维护的 country（避免默认值不一致/被覆盖）
         if not country or str(country).strip() in ("未知", "未知国家"):
             try:
-                from core.modules.common.model_database import ModelDatabase
-                db = ModelDatabase('models.db')
-                info = db.get_model(model_name) or {}
+                info = self.db.get_model(model_name) or {}
                 db_country = info.get('country')
                 if db_country and str(db_country).strip():
                     country = str(db_country).strip()
             except Exception:
                 pass
+
         
         # 检查是否需要停止
         if self._should_stop():
@@ -233,11 +237,10 @@ class ModelProcessor:
             # 读取该模特的专属黑名单URL
             blacklisted_urls = set()
             try:
-                from core.modules.common.model_database import ModelDatabase
-                db = ModelDatabase('models.db')
-                blacklisted_urls = set(db.get_blacklisted_urls_by_model(model_name))
+                blacklisted_urls = set(self.db.get_blacklisted_urls_by_model(model_name))
             except Exception:
                 pass
+
 
             # 初始化查重缓存
             cache_ctrl = self.config.get('cache', {})
@@ -721,6 +724,7 @@ def process_models_multithreaded(
     missing_logger: logging.Logger,
     countries_dir: str,
     smart_cache: SmartCache,
+    db: ModelDatabase = None,
     running_flag=None
 ) -> List[ModelResult]:
     """
@@ -734,6 +738,7 @@ def process_models_multithreaded(
         missing_logger: 缺失视频日志记录器
         countries_dir: 国家分类目录
         smart_cache: 智能缓存实例
+        db: 数据库实例
         running_flag: 运行标志
         
     Returns:
@@ -750,8 +755,9 @@ def process_models_multithreaded(
     # 创建处理器
     processor = ModelProcessor(
         config, module_type, logger, missing_logger,
-        countries_dir, smart_cache, running_flag
+        countries_dir, smart_cache, db, running_flag
     )
+
     
     results = []
     completed = 0
@@ -975,7 +981,11 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
         # 设置日志
         logger, missing_logger, countries_dir = setup_logging(config['log_dir'])
         
+        # 初始化数据库
+        db = ModelDatabase('models.db')
+        
         # 获取多线程配置
+
         multithreading_config = config.get('multithreading', {})
         use_multithreading = multithreading_config.get('enabled', True)
         max_workers = multithreading_config.get('max_workers', 3)
@@ -1173,15 +1183,16 @@ def main(module_arg="auto", local_dirs=None, scraper="selenium", running_flag=No
             results = process_models_multithreaded(
                 local_matches, config, module_type,
                 logger, missing_logger, countries_dir,
-                smart_cache, running_flag
+                smart_cache, db, running_flag
             )
         else:
             # 单线程模式（用于调试或只有一个模特的情况）
             logger.info("\n使用单线程模式处理...")
             processor = ModelProcessor(
                 config, module_type, logger, missing_logger,
-                countries_dir, smart_cache, running_flag
+                countries_dir, smart_cache, db, running_flag
             )
+
             results = []
             for i, model_info in enumerate(local_matches, 1):
                 logger.info(f"\n[{i}/{len(local_matches)}] 处理模特: {model_info[0]}")

@@ -15,8 +15,18 @@ from pathlib import Path
 
 class ModelDatabase:
     """模特数据库管理器"""
+    _instance = None
+    _initialized = False
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(ModelDatabase, cls).__new__(cls)
+        return cls._instance
     
     def __init__(self, db_path: str = "models.db"):
+        if ModelDatabase._initialized:
+            return
+            
         # 确保路径在EXE环境中正确工作
         if getattr(sys, 'frozen', False):
             # 打包为EXE时，使用可执行文件所在目录
@@ -28,6 +38,8 @@ class ModelDatabase:
         self.db_path = os.path.join(base_path, db_path)
         self.logger = logging.getLogger(__name__)
         self.init_database()
+        ModelDatabase._initialized = True
+
     
     def init_database(self):
         """初始化数据库表结构"""

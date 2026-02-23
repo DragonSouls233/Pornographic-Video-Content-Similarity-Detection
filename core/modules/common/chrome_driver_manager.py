@@ -292,6 +292,20 @@ class ChromeDriverManager:
         try:
             # 提取主版本号
             major_version = chrome_version.split('.')[0]
+            
+            # 检查是否已有匹配版本的ChromeDriver
+            driver_path = self.get_driver_path()
+            if driver_path.exists():
+                # 检查版本是否匹配
+                installed_version = self.get_installed_driver_version()
+                if installed_version:
+                    installed_major = installed_version.split('.')[0]
+                    if installed_major == major_version:
+                        logger.info(f"✅ ChromeDriver已存在且版本匹配: {installed_version}")
+                        return True
+                    else:
+                        logger.info(f"⚠️ 版本不匹配，需要更新: {installed_version} -> {major_version}")
+            
             logger.info(f"正在为Chrome {chrome_version} (主版本 {major_version}) 下载匹配的ChromeDriver...")
             
             # 构造下载URL
@@ -301,7 +315,6 @@ class ChromeDriverManager:
                 return False
             
             # 下载文件
-            driver_path = self.get_driver_path()
             temp_path = driver_path.with_suffix('.tmp')
             
             # 如果临时文件已存在，先删除
@@ -323,7 +336,7 @@ class ChromeDriverManager:
             if self.current_system != "windows":
                 driver_path.chmod(0o755)
             
-            logger.info(f"ChromeDriver下载完成: {driver_path}")
+            logger.info(f"✅ ChromeDriver下载完成: {driver_path}")
             return True
             
         except Exception as e:
@@ -473,42 +486,41 @@ class ChromeDriverManager:
                     break
 
 
-def check_and_setup_chromedriver(config: dict = None) -> Tuple[bool, str]:
+def check_and_setup_chromedriver(config: dict = None, force_download: bool = False) -> Tuple[bool, str]:
     """
     检查并设置ChromeDriver
     
     Args:
         config: 配置字典（可选）
+        force_download: 是否强制重新下载（默认False）
         
     Returns:
         Tuple[bool, str]: (是否成功, 信息)
     """
-    logger.info("🔍 开始ChromeDriver检查...")
+    logger.debug("🔍 检查ChromeDriver...")
     
     # 检测Chrome版本
     chrome_version = ChromeVersionDetector.detect_chrome_version()
     if not chrome_version:
         return False, "未检测到Chrome浏览器，请确保已安装Chrome"
     
-    logger.info(f"✅ 检测到Chrome版本: {chrome_version}")
+    logger.debug(f"检测到Chrome版本: {chrome_version}")
     
     # 初始化ChromeDriver管理器
     driver_manager = ChromeDriverManager("drivers")
     
     # 检查已安装的ChromeDriver
     installed_version = driver_manager.get_installed_driver_version()
-    if installed_version:
-        logger.info(f"✅ 已安装ChromeDriver版本: {installed_version}")
-        
+    if installed_version and not force_download:
         # 检查版本是否匹配
         chrome_major = chrome_version.split('.')[0]
         driver_major = installed_version.split('.')[0]
         
         if chrome_major == driver_major:
-            logger.info("✅ Chrome和ChromeDriver版本匹配")
+            logger.info(f"✅ ChromeDriver已就绪 (版本: {installed_version})")
             return True, f"ChromeDriver {installed_version} 已就绪"
         else:
-            logger.warning(f"⚠️  版本不匹配 - Chrome: {chrome_major}, ChromeDriver: {driver_major}")
+            logger.info(f"⚠️  版本不匹配 - Chrome: {chrome_major}, ChromeDriver: {driver_major}")
     
     # 需要下载匹配的ChromeDriver
     logger.info("📥 正在下载匹配的ChromeDriver...")

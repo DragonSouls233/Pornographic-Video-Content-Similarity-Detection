@@ -254,9 +254,15 @@ class ChromeVersionManager:
             
             try:
                 # 使用 webdriver-manager 下载匹配版本的 ChromeDriver
-                driver_path = ChromeDriverManager(
-                    driver_version=chrome_version if major_version else None
-                ).install()
+                # 设置 cache_dir 避免重复下载
+                from webdriver_manager.core.utils import CacheManager
+                cache_dir = os.path.join(os.path.expanduser("~"), ".wdm", "drivers")
+                
+                manager = ChromeDriverManager(
+                    driver_version=chrome_version if major_version else None,
+                    cache_manager=CacheManager(cache_dir=cache_dir)
+                )
+                driver_path = manager.install()
                 self.logger.info(f"✅ ChromeDriver 已准备: {driver_path}")
                 return driver_path
             except Exception as e:
@@ -267,7 +273,10 @@ class ChromeVersionManager:
         
         # 回退到最新版本
         try:
-            driver_path = ChromeDriverManager().install()
+            from webdriver_manager.core.utils import CacheManager
+            cache_dir = os.path.join(os.path.expanduser("~"), ".wdm", "drivers")
+            manager = ChromeDriverManager(cache_manager=CacheManager(cache_dir=cache_dir))
+            driver_path = manager.install()
             self.logger.info(f"✅ 使用最新 ChromeDriver: {driver_path}")
             return driver_path
         except Exception as e:
@@ -319,16 +328,24 @@ class ChromeVersionManager:
         return False, "无法获取 ChromeDriver 版本信息"
 
 
-def get_chromedriver_path(config: dict = None) -> str:
+# 全局缓存，避免重复下载
+_chromedriver_path_cache = None
+_chromedriver_version_cache = None
+
+
+def get_chromedriver_path(config: dict = None, force_refresh: bool = False) -> str:
     """
     获取 ChromeDriver 路径的便捷函数
     
     Args:
         config: 配置字典，可能包含 chromedriver_path 配置
+        force_refresh: 是否强制刷新缓存
         
     Returns:
         ChromeDriver 可执行文件路径
     """
+    global _chromedriver_path_cache, _chromedriver_version_cache
+    
     logger = logging.getLogger(__name__)
     
     # 检查配置中是否指定了路径
@@ -336,12 +353,35 @@ def get_chromedriver_path(config: dict = None) -> str:
         selenium_config = config.get('selenium', {})
         custom_path = selenium_config.get('chromedriver_path', '')
         if custom_path and os.path.exists(custom_path):
-            logger.info(f"使用配置的 ChromeDriver: {custom_path}")
+            logger.debug(f"使用配置的 ChromeDriver: {custom_path}")
             return custom_path
+    
+    # 如果缓存有效且未强制刷新，直接返回缓存
+    if _chromedriver_path_cache and not force_refresh:
+        if os.path.exists(_chromedriver_path_cache):
+            logger.debug(f"使用缓存的 ChromeDriver: {_chromedriver_path_cache}")
+            return _chromedriver_path_cache
+        else:
+            # 缓存失效，清除
+            _chromedriver_path_cache = None
+            _chromedriver_version_cache = None
     
     # 使用版本管理器自动获取
     manager = ChromeVersionManager()
-    return manager.get_matching_chromedriver()
+    driver_path = manager.get_matching_chromedriver()
+    
+    # 更新缓存
+    _chromedriver_path_cache = driver_path
+    
+    logger.info(f"✅ ChromeDriver 已准备: {driver_path}")
+    return driver_path
+
+
+def clear_chromedriver_cache():
+    """清除 ChromeDriver 路径缓存"""
+    global _chromedriver_path_cache, _chromedriver_version_cache
+    _chromedriver_path_cache = None
+    _chromedriver_version_cache = None
 
 
 def check_chrome_installation() -> Tuple[bool, str]:
